@@ -12,6 +12,7 @@ class VenuesController extends Controller
         $query = Venue::query();
 
         if ($request->filled('search')) {
+            // Escape និមិត្តសញ្ញា % និង _ ដើមី្បសុវត្ថិភាព SQL
             $search = addcslashes($request->search, '%_');
             
             $query->where(function ($q) use ($search) {
