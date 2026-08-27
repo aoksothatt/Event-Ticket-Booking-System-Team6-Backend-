@@ -16,7 +16,6 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
 // email otp
-Route::post('/forgot-password', [PasswordController::class, 'forgetPassword']);
-Route::post('/otp/send', [EmailOTPController::class, 'send']);
+Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword']);
 Route::post('/otp/verify', [EmailOTPController::class, 'verify']);
 Route::post('/reset', [EmailOTPController::class, 'resetPassword']);
