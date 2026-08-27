@@ -1,0 +1,19 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class booking_item extends Model
+{
+    //
+    protected $fillable = [
+        'booking_id',
+        'ticket_type_id',
+        'quantity',
+        'unit_price',
+        'subtotal',
+        
+    ];
+}

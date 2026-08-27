@@ -1,0 +1,22 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\PasswordController;
+use App\Http\Controllers\Auth\EmailOTPController;
+
+Route::get('/user', function (Request $request) {
+    return $request->user();
+})->middleware('auth:sanctum');
+
+// auth route
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+// email otp
+Route::post('/forgot-password', [PasswordController::class, 'forgetPassword']);
+Route::post('/otp/send', [EmailOTPController::class, 'send']);
+Route::post('/otp/verify', [EmailOTPController::class, 'verify']);
+Route::post('/reset', [EmailOTPController::class, 'resetPassword']);
