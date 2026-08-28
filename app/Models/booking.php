@@ -24,20 +24,20 @@ class Booking extends Model
         'total_amount' => 'decimal:2',
     ];
 
-   
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    
+
     public function event(): BelongsTo
     {
-        return $this->belongsTo(events::class);
+        return $this->belongsTo(Event::class);
     }
 
     public function items(): HasMany
     {
-        return $this->hasMany(booking_item::class);
+        return $this->hasMany(BookingItem::class);
     }
 }

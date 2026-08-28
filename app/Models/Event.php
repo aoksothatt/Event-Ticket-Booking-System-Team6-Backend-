@@ -14,9 +14,18 @@ class Event extends Model
     protected $table = 'events';
 
     protected $fillable = [
-        'organizer_id', 'category_id', 'venue_id', 'title', 
-        'slug', 'description', 'start_date', 'end_date', 
-        'start_time', 'end_time', 'banner', 'status',
+        'organizer_id',
+        'category_id',
+        'venue_id',
+        'title',
+        'slug',
+        'description',
+        'start_date',
+        'end_date',
+        'start_time',
+        'end_time',
+        'banner',
+        'status',
     ];
 
     protected $casts = [
@@ -24,11 +33,29 @@ class Event extends Model
         'end_date'   => 'date',
     ];
 
-    public function organizer(): BelongsTo { return $this->belongsTo(Organizer::class); }
-    public function category(): BelongsTo { return $this->belongsTo(Category::class); }
-    public function venue(): BelongsTo { return $this->belongsTo(Venue::class); }
+    public function organizer(): BelongsTo
+    {
+        return $this->belongsTo(Organizer::class);
+    }
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
+    }
+    public function venue(): BelongsTo
+    {
+        return $this->belongsTo(Venue::class);
+    }
 
-    public function images(): HasMany { return $this->hasMany(Event_Img::class); }
-    public function ticketTypes(): HasMany { return $this->hasMany(Ticket_Type::class); }
-    public function bookings(): HasMany { return $this->hasMany(Booking::class); }
+    public function images(): HasMany
+    {
+        return $this->hasMany(EventImg::class);
+    }
+    public function ticketTypes(): HasMany
+    {
+        return $this->hasMany(TicketType::class);
+    }
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
 }

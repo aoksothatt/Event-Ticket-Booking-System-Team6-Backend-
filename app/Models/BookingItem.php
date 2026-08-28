@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class booking_item extends Model
+class BookingItem extends Model
 {
     //
     protected $fillable = [
@@ -14,6 +14,6 @@ class booking_item extends Model
         'quantity',
         'unit_price',
         'subtotal',
-        
+
     ];
 }

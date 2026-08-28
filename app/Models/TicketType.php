@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class ticket_type extends Model
+class TicketType extends Model
 {
     //
     protected $fillable = [
@@ -24,11 +24,10 @@ class ticket_type extends Model
     ];
     public function event(): BelongsTo
     {
-        return $this->belongsTo (events::class);
-
+        return $this->belongsTo(Event::class);
     }
-    public function BookingIem(): BelongsTo 
+    public function BookingIem(): BelongsTo
     {
-        return $this->belongsTo (booking_item::class);
+        return $this->belongsTo(BookingItem::class);
     }
 }

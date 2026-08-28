@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class payments extends Model
+class Payments extends Model
 {
     use HasFactory;
 
@@ -25,7 +25,8 @@ class payments extends Model
     ];
 
     // Payment -> Booking
-    public function booking(){
-        return $this->belongsTo(booking::class);
+    public function booking()
+    {
+        return $this->belongsTo(Booking::class);
     }
 }

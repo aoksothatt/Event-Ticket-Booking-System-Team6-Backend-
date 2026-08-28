@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class check_in extends Model
+class CheckIn extends Model
 {
     //
     protected $fillable = [
@@ -15,14 +15,14 @@ class check_in extends Model
         'status',
     ];
     protected $casts = [
-        'checked_in'=> 'dateime',
+        'checked_in' => 'dateime',
     ];
     public function booking(): BelongsTo
     {
-        return $this->belongsTo(booking::class);
+        return $this->belongsTo(Booking::class);
     }
-    public function agent(): BelongsTo 
+    public function agent(): BelongsTo
     {
-        return $this->belongsTo(user::class, 'checked_by');
+        return $this->belongsTo(User::class, 'checked_by');
     }
 }

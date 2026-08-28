@@ -4,8 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\Event;
 
-class event_img extends Model
+class EventImg extends Model
 {
     //
     protected $fillable = [
@@ -18,6 +19,6 @@ class event_img extends Model
     ];
     public function event(): BelongsTo
     {
-        return $this->belongsTo (events::class);
+        return $this->belongsTo(Event::class);
     }
 }

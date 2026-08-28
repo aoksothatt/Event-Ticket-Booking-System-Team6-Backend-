@@ -5,7 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class organizer extends Model
+
+class Organizer extends Model
 {
     use HasFactory;
 
@@ -20,13 +21,15 @@ class organizer extends Model
     ];
 
     // Organizer -> User
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
 
     //Organizer -> events
 
-    public function events(){
-        return $this->hasMany(events::class);
+    public function events()
+    {
+        return $this->hasMany(Event::class);
     }
 }
