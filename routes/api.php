@@ -10,6 +10,7 @@ use App\Http\Controllers\OrganizerController;
 use App\Models\organizer;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\VenuesController;
+use App\Http\Controllers\EventsController; // 1. Import Controller
 
 
 Route::get('/user', function (Request $request) {
@@ -25,8 +26,6 @@ Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword']);
 Route::post('/otp/verify', [EmailOTPController::class, 'verify']);
 Route::post('/reset', [EmailOTPController::class, 'resetPassword']);
 
-
-
 // controller Organizer
 
 Route::get('/organizers', [OrganizerController::class, 'index'])->name('organizers.index');
@@ -38,3 +37,7 @@ Route::delete('/organizer/{id}', [OrganizerController::class, 'destroy'])->name(
 //
 Route::apiResource('users', UsersController::class);
 Route::apiResource('venues', VenuesController::class);
+// Resources
+Route::apiResource('users', UsersController::class);
+Route::apiResource('venues', VenuesController::class);
+Route::apiResource('events', EventsController::class); // 2. បន្ថែម Events Route
