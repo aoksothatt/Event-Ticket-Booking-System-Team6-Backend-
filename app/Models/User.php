@@ -76,4 +76,40 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasOne(Profile::class);
     }
+
+    /**
+     * Check if the user has one of the given roles.
+     */
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role, $roles, true);
+    }
+
+    /**
+     * Check if the user has a single permission.
+     * Admin is a super role and passes every check.
+     */
+    public function hasPermission(string $permission): bool
+    {
+        if ($this->role === 'admin') {
+            return true;
+        }
+
+        return in_array($permission, config("permissions.roles.{$this->role}", []), true);
+    }
+
+    /**
+     * Check if the user has ANY of the given permissions.
+     * Admin is a super role and passes every check.
+     */
+    public function hasAnyPermission(string ...$permissions): bool
+    {
+        if ($this->role === 'admin') {
+            return true;
+        }
+
+        $granted = config("permissions.roles.{$this->role}", []);
+
+        return count(array_intersect($permissions, $granted)) > 0;
+    }
 }
