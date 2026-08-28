@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\EmailOTPController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\VenuesController;
+use App\Http\Controllers\EventsController; // 1. Import Controller
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -21,7 +22,8 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword']);
 Route::post('/otp/verify', [EmailOTPController::class, 'verify']);
 Route::post('/reset', [EmailOTPController::class, 'resetPassword']);
-//
-Route::apiResource('users', UsersController::class);
-Route::apiResource('venues',VenuesController::class);
 
+// Resources
+Route::apiResource('users', UsersController::class);
+Route::apiResource('venues', VenuesController::class);
+Route::apiResource('events', EventsController::class); // 2. បន្ថែម Events Route
