@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\EmailOTPController;
 use App\Http\Controllers\Auth\ProfileController;
+use App\Http\Controllers\BookingController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\EventsController;
 use App\Http\Controllers\OrganizerController;
@@ -33,8 +34,6 @@ Route::get('/events', [EventsController::class, 'index']);
 Route::get('/events/{event}', [EventsController::class, 'show']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 
-//  route testing here
-
 /*
 |--------------------------------------------------------------------------
 | AUTHENTICATED ROUTES (any logged-in role)
@@ -55,7 +54,11 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
 });
 
-// admin route
+/*
+|--------------------------------------------------------------------------
+| ADMIN ROUTES
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
 
     // Full user management
@@ -71,25 +74,43 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::put('/venues/{venue}', [VenuesController::class, 'update']);
     Route::delete('/venues/{venue}', [VenuesController::class, 'destroy']);
 
-    // Organizer management (delete / force etc.)
+    // Organizer management
     Route::delete('/organizer/{id}', [OrganizerController::class, 'destroy'])->name('organizers.destroy');
 });
 
-// organizer route
+/*
+|--------------------------------------------------------------------------
+| ORGANIZER + ADMIN ROUTES
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
 
-    // organizer permisstion here
+    // Event management
+    Route::post('/events', [EventsController::class, 'store'])->name('events.store');
+    Route::match(['put', 'patch'], '/events/{id}', [EventsController::class, 'update'])->name('events.update');
+    Route::delete('/events/{id}', [EventsController::class, 'destroy'])->name('events.destroy');
+
+    // Organizer profile update
+    Route::put('/organizers/{id}', [OrganizerController::class, 'update'])->name('organizer.update');
 });
 
-// customer route
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER + ORGANIZER + ADMIN ROUTES
+|--------------------------------------------------------------------------
+*/
 Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
+
+    // Booking routes
+    Route::get('/bookings', [BookingController::class, 'index']);
+    Route::get('/bookings/{id}', [BookingController::class, 'show']);
+    Route::post('/bookings', [BookingController::class, 'store']);
+    Route::delete('/bookings/{id}', [BookingController::class, 'destroy']);
 
     // Current user's own profile
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::post('/profile/change-password', [ProfileController::class, 'changePassword']);
     Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
-
-    // BookingController, ReviewsController, PaymentsController here
 
 });
