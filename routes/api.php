@@ -1,15 +1,15 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\EmailOTPController;
+use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\EventsController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\VenuesController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,6 +33,8 @@ Route::get('/events', [EventsController::class, 'index']);
 Route::get('/events/{event}', [EventsController::class, 'show']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 
+//  route testing here
+
 /*
 |--------------------------------------------------------------------------
 | AUTHENTICATED ROUTES (any logged-in role)
@@ -53,7 +55,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
 });
 
-//admin route 
+// admin route
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
 
     // Full user management
@@ -82,6 +84,12 @@ Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
 // customer route
 Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
 
-    // BookingController, ReviewsController, PaymentsController, and ProfileController here
+    // Current user's own profile
+    Route::get('/profile', [ProfileController::class, 'show']);
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/change-password', [ProfileController::class, 'changePassword']);
+    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
+
+    // BookingController, ReviewsController, PaymentsController here
 
 });
