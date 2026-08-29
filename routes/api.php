@@ -53,11 +53,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
 });
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN ROUTES (role:admin only)
-|--------------------------------------------------------------------------
-*/
+//admin route 
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
 
     // Full user management
@@ -77,47 +73,15 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::delete('/organizer/{id}', [OrganizerController::class, 'destroy'])->name('organizers.destroy');
 });
 
-/*
-|--------------------------------------------------------------------------
-| ORGANIZER ROUTES (role:organizer + admin override)
-|--------------------------------------------------------------------------
-*/
+// organizer route
 Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
 
-    // Manage own events
-    Route::post('/events', [EventsController::class, 'store']);
-    Route::put('/events/{event}', [EventsController::class, 'update']);
-    Route::delete('/events/{event}', [EventsController::class, 'destroy']);
-
-    // Update own organizer profile
-    Route::put('/organizers/{id}', [OrganizerController::class, 'update'])->name('organizer.update');
+    // organizer permisstion here
 });
 
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER ROUTES (role:customer + organizer/admin view override)
-|--------------------------------------------------------------------------
-*/
+// customer route
 Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
 
-    // Example: customer books, organizer/admin can view everything
-    // Route::post('/bookings', [BookingController::class, 'store']);
-    // Route::get('/bookings', [BookingController::class, 'index']);
-    // Route::get('/bookings/{id}', [BookingController::class, 'show']);
-
-    // Example: leave a review
-    // Route::post('/reviews', [ReviewsController::class, 'store']);
-
-    // Example: make a payment
-    // Route::post('/payments', [PaymentsController::class, 'store']);
-
-    // Example: own profile management
-    // Route::get('/profile', [ProfileController::class, 'show']);
-    // Route::put('/profile', [ProfileController::class, 'update']);
-
-
-
     // BookingController, ReviewsController, PaymentsController, and ProfileController here
-
 
 });
