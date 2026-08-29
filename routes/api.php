@@ -73,6 +73,7 @@ Route::middleware(['auth:api'])->group(function () {
         ->name('organizers.store');
 });
 
+<<<<<<< HEAD
 
 /*
 |--------------------------------------------------------------------------
@@ -80,6 +81,9 @@ Route::middleware(['auth:api'])->group(function () {
 |--------------------------------------------------------------------------
 */
 
+=======
+//admin route 
+>>>>>>> 9c8b492c0ed8b3e4c5bd73d1e3faefeaa0d44499
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
 
     // User management
@@ -104,6 +108,7 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
         ->name('organizers.destroy');
 });
 
+<<<<<<< HEAD
 
 /*
 |--------------------------------------------------------------------------
@@ -171,5 +176,17 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
 
     // Route::get('/profile', [ProfileController::class, 'show']);
     // Route::put('/profile', [ProfileController::class, 'update']);
+=======
+// organizer route
+Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
+
+    // organizer permisstion here
+});
+
+// customer route
+Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
+
+    // BookingController, ReviewsController, PaymentsController, and ProfileController here
+>>>>>>> 9c8b492c0ed8b3e4c5bd73d1e3faefeaa0d44499
 
 });
