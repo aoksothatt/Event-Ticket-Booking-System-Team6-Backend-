@@ -9,20 +9,11 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 
 class PermissionMiddleware
 {
-    /**
-     * Handle an incoming request by checking the user's permissions.
-     *
-     * Usage: ->middleware('permission:create_bookings')
-     *        ->middleware('permission:create_bookings,make_payments')  (ANY of them passes)
-     *
-     * The permission list for each role lives in config/permissions.php.
-     * Admin bypasses every check (super role).
-     */
     public function handle(Request $request, Closure $next, string ...$permissions): Response
     {
         $user = JWTAuth::parseToken()->authenticate();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 

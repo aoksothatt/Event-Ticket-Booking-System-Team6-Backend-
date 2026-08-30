@@ -23,7 +23,7 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $events,
+            'data' => $events,
         ]);
     }
 
@@ -31,13 +31,13 @@ class EventsController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'venue_id'    => 'required|exists:venues,id',
+            'venue_id' => 'required|exists:venues,id',
             'category_id' => 'required|exists:categories,id',
-            'title'       => 'required|string|max:255',
+            'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'start_date'  => 'required|date|after_or_equal:today',
-            'end_date'    => 'required|date|after_or_equal:start_date',
-            'status'      => 'nullable|in:draft,published,cancelled',
+            'start_date' => 'required|date|after_or_equal:today',
+            'end_date' => 'required|date|after_or_equal:start_date',
+            'status' => 'nullable|in:draft,published,cancelled',
         ]);
 
         $validated['organizer_id'] = $request->user()?->id ?? $request->input('organizer_id');
@@ -46,7 +46,7 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Event created successfully',
-            'data'    => $event->load(['venue', 'category']),
+'data' => $event->load(['venue', 'category']),
         ], 201);
     }
 
@@ -57,13 +57,7 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $event->load([
-                'venue',
-                'category',
-                'ticketTypes',
-                'eventImages',
-                'organizer'
-            ]),
+'data' => $event->load(['venue', 'category', 'ticketTypes', 'eventImages', 'organizer']),
         ]);
     }
 
