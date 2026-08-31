@@ -10,7 +10,7 @@ class EventsController extends Controller
     // get all events with search, filter, and pagination
     public function index(Request $request)
     {
-        $events = Event::with(['venue', 'category', 'eventImages'])
+        $events = Event::with(['venue', 'category', 'images'])
             ->when($request->search, function ($query, $search) {
                 $query->where('title', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%");
@@ -30,15 +30,29 @@ class EventsController extends Controller
     // Create new event
     public function store(Request $request)
     {
+
         $validated = $request->validate([
-            'venue_id' => 'required|exists:venues,id',
+            'organizer_id' => 'required|exists:organizers,id',
             'category_id' => 'required|exists:categories,id',
+            'venue_id' => 'required|exists:venues,id',
+
             'title' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255|unique:events,slug',
+
             'description' => 'nullable|string',
+
             'start_date' => 'required|date|after_or_equal:today',
             'end_date' => 'required|date|after_or_equal:start_date',
+
+            'start_time' => 'nullable|date_format:H:i',
+            'end_time' => 'nullable|date_format:H:i|after:start_time',
+
+            'banner' => 'nullable|string|max:255',
+
             'status' => 'nullable|in:draft,published,cancelled',
         ]);
+
+
 
         $validated['organizer_id'] = $request->user()?->id ?? $request->input('organizer_id');
         $event = Event::create($validated);
@@ -46,7 +60,7 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Event created successfully',
-'data' => $event->load(['venue', 'category']),
+            'data' => $event->load(['venue', 'category']),
         ], 201);
     }
 
@@ -57,7 +71,7 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-'data' => $event->load(['venue', 'category', 'ticketTypes', 'eventImages', 'organizer']),
+            'data' => $event->load(['venue', 'category', 'ticketTypes', 'images', 'organizer']),
         ]);
     }
 

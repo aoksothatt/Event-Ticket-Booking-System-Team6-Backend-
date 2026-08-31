@@ -21,11 +21,11 @@ class Organizer extends Model
     ];
 
     // Organizer -> User
+
     public function user()
     {
         return $this->belongsTo(User::class);
     }
-
     //Organizer -> events
 
     public function events()

@@ -8,6 +8,7 @@ use App\Http\Controllers\BookingItemController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\EventsController;
 use App\Http\Controllers\OrganizerController;
+use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\VenuesController;
 use Illuminate\Http\Request;
@@ -35,6 +36,20 @@ Route::get('/events', [EventsController::class, 'index']);
 Route::get('/events/{event}', [EventsController::class, 'show']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 
+
+
+
+//testing by sothat
+
+Route::apiResource('tickettype', TicketTypeController::class);
+Route::apiResource('event', EventsController::class);
+Route::apiResource('venus', VenuesController::class);
+Route::apiResource('categories', CategoriesController::class);
+Route::apiResource('organizer', OrganizerController::class);
+Route::apiResource('user', UsersController::class);
+
+
+
 /*
 |--------------------------------------------------------------------------
 | AUTHENTICATED ROUTES (any logged-in role)
@@ -55,28 +70,20 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
 });
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 613079b27dc7d1339d6a0ca20ee97a0a301b3696
 /*
 |--------------------------------------------------------------------------
 | ADMIN ROUTES
 |--------------------------------------------------------------------------
 */
-<<<<<<< HEAD
-
-=======
->>>>>>> 613079b27dc7d1339d6a0ca20ee97a0a301b3696
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
 
     // Full user management
     Route::apiResource('users', UsersController::class);
 
     // Category management
-    Route::post('/categories', [CategoriesController::class, 'store']);
-    Route::put('/categories/{id}', [CategoriesController::class, 'update']);
-    Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
+    // Route::post('/categories', [CategoriesController::class, 'store']);
+    // Route::put('/categories/{id}', [CategoriesController::class, 'update']);
+    // Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
 
     // Venue management
     Route::post('/venues', [VenuesController::class, 'store']);
@@ -87,10 +94,6 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::delete('/organizer/{id}', [OrganizerController::class, 'destroy'])->name('organizers.destroy');
 });
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 613079b27dc7d1339d6a0ca20ee97a0a301b3696
 /*
 |--------------------------------------------------------------------------
 | ORGANIZER + ADMIN ROUTES
@@ -98,10 +101,6 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
 */
 Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
 
-    // Event management
-    Route::post('/events', [EventsController::class, 'store'])->name('events.store');
-    Route::match(['put', 'patch'], '/events/{id}', [EventsController::class, 'update'])->name('events.update');
-    Route::delete('/events/{id}', [EventsController::class, 'destroy'])->name('events.destroy');
 
     // Organizer profile update
     Route::put('/organizers/{id}', [OrganizerController::class, 'update'])->name('organizer.update');
@@ -120,7 +119,6 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
     Route::post('/bookings', [BookingController::class, 'store']);
     Route::delete('/bookings/{id}', [BookingController::class, 'destroy']);
 
-<<<<<<< HEAD
 
     /*
     |--------------------------------------------------------------------------
@@ -128,8 +126,8 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
     |--------------------------------------------------------------------------
     */
 
-    Route::get('/bookingType' , [BookingItemController::class , 'index']);
-    Route::get('/bookingType' , [BookingItemController::class , 'show']);
+    Route::get('/bookingType', [BookingItemController::class, 'index']);
+    Route::get('/bookingType', [BookingItemController::class, 'show']);
     /*
     |--------------------------------------------------------------------------
     | Review routes
@@ -156,12 +154,3 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
     // Route::put('/profile', [ProfileController::class, 'update']);
 
 });
-=======
-    // Current user's own profile
-    Route::get('/profile', [ProfileController::class, 'show']);
-    Route::put('/profile', [ProfileController::class, 'update']);
-    Route::post('/profile/change-password', [ProfileController::class, 'changePassword']);
-    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
-
-});
->>>>>>> 613079b27dc7d1339d6a0ca20ee97a0a301b3696

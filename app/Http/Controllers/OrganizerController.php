@@ -9,7 +9,7 @@ class OrganizerController extends Controller
 {
     // Get /api/organizers
     public function index(){
-        $organizers = organizer::with('users')->latest()->get();
+        $organizers = organizer::with('user')->latest()->get();
 
         return response()->json([
             'success' => true,
