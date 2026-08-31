@@ -7,19 +7,21 @@ use Illuminate\Http\Request;
 
 class BookingItemController extends Controller
 {
-    public function index (){
+    public function index()
+    {
         return response()->json([
             'success' => true,
             'data' => BookingItem::with([
-                'booking' ,
+                'booking',
                 'ticketType'
             ])->latest()->get()
         ]);
     }
 
-    public function show($id){
+    public function show($id)
+    {
         $item = BookingItem::with([
-            'booking' ,
+            'booking',
             'ticketType'
         ])->findOrFail($id);
 
