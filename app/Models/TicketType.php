@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TicketType extends Model
 {
@@ -26,8 +27,8 @@ class TicketType extends Model
     {
         return $this->belongsTo(Event::class);
     }
-    public function BookingIem(): BelongsTo
+    public function bookingItems(): HasMany
     {
-        return $this->belongsTo(BookingItem::class);
+        return $this->hasMany(BookingItem::class);
     }
 }

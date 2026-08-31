@@ -19,7 +19,7 @@ class CheckInController extends Controller
 
     public function store(Request $request){
         $validated = $request ->validate([
-            'booking_id ' => 'required|exists:bookings,id',
+            'booking_id' => 'required|exists:Booking,id',
             'checked_by' => 'required|exists:users,id',
             'status' => 'required|string|max:20',
         ]);
