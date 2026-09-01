@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('check_ins', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('booking_id')->constrained('bookings')->cascadeOnDelete();
+            $table->foreignId('booking_id')->constrained('Booking')->cascadeOnDelete();
             $table->foreignId('checked_by')->constrained('users')->cascadeOnDelete();
             $table->timestamp('checked_in_at')->nullable();
             $table->string('status', 20)->default('pending');

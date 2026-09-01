@@ -7,21 +7,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CheckIn extends Model
 {
-    //
     protected $fillable = [
         'booking_id',
-        'check_by',
-        'check_in_at',
+        'checked_by',
+        'checked_in_at',
         'status',
     ];
+
     protected $casts = [
-        'checked_in' => 'dateime',
+        'checked_in_at' => 'datetime',
     ];
+
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
     }
-    public function agent(): BelongsTo
+    public function checkedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'checked_by');
     }

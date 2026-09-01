@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Profile extends Model
 {
     protected $fillable = [
+        'user_id',
         'phone',
         'gender',
         'dob',
@@ -18,5 +19,12 @@ class Profile extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'dob' => 'date:Y-m-d',
+        ];
     }
 }

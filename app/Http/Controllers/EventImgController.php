@@ -23,7 +23,6 @@ class EventImgController extends Controller
         ]);
     }
 
-
     // Get all image one event
     public function eventImages(Event $event)
     {
@@ -37,7 +36,6 @@ class EventImgController extends Controller
         ]);
     }
 
-
     // Upload
     public function store(Request $request)
     {
@@ -50,7 +48,7 @@ class EventImgController extends Controller
         // Upload image to storage/app/public/events
         $path = $request->file('image')->store('events', 'public');
 
-        // Save image  in database
+        // Save image in database
         $eventImage = EventImg::create([
             'event_id'   => $validated['event_id'],
             'image'      => $path,
@@ -64,7 +62,6 @@ class EventImgController extends Controller
         ], 201);
     }
 
-
     // Show one event image
     public function show(EventImg $eventImg)
     {
@@ -73,7 +70,6 @@ class EventImgController extends Controller
             'data' => $eventImg->load('event'),
         ]);
     }
-
 
     // Update event image
     public function update(Request $request, EventImg $eventImg)
@@ -103,7 +99,6 @@ class EventImgController extends Controller
         ]);
     }
 
-
     // Delete event image
     public function destroy(EventImg $eventImg)
     {
@@ -120,4 +115,3 @@ class EventImgController extends Controller
         ]);
     }
 }
-

@@ -10,10 +10,10 @@ class EventsController extends Controller
     // get all events with search, filter, and pagination
     public function index(Request $request)
     {
-        $events = Event::with(['venue', 'category', 'eventImages'])
+        $events = Event::with(['venue', 'category', 'images'])
             ->when($request->search, function ($query, $search) {
                 $query->where('title', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%");
             })
             ->when($request->category_id, function ($query, $categoryId) {
                 $query->where('category_id', $categoryId);
@@ -23,22 +23,36 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $events,
+            'data' => $events,
         ]);
     }
 
-    // Create new event 
+    // Create new event
     public function store(Request $request)
     {
+
         $validated = $request->validate([
-            'venue_id'    => 'required|exists:venues,id',
+            'organizer_id' => 'required|exists:organizers,id',
             'category_id' => 'required|exists:categories,id',
-            'title'       => 'required|string|max:255',
+            'venue_id' => 'required|exists:venues,id',
+
+            'title' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255|unique:events,slug',
+
             'description' => 'nullable|string',
-            'start_date'  => 'required|date|after_or_equal:today',
-            'end_date'    => 'required|date|after_or_equal:start_date',
-            'status'      => 'nullable|in:draft,published,cancelled',
+
+            'start_date' => 'required|date|after_or_equal:today',
+            'end_date' => 'required|date|after_or_equal:start_date',
+
+            'start_time' => 'nullable|date_format:H:i',
+            'end_time' => 'nullable|date_format:H:i|after:start_time',
+
+            'banner' => 'nullable|string|max:255',
+
+            'status' => 'nullable|in:draft,published,cancelled',
         ]);
+
+
 
         $validated['organizer_id'] = $request->user()?->id ?? $request->input('organizer_id');
         $event = Event::create($validated);
@@ -46,30 +60,34 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Event created successfully',
-            'data'    => $event->load(['venue', 'category']), 
+            'data' => $event->load(['venue', 'category']),
         ], 201);
     }
 
     // Show event details
-    public function show(Event $event)
+    public function show($id)
     {
+        $event = Event::findOrFail($id);
+
         return response()->json([
             'success' => true,
-            'data'    => $event->load(['venue', 'category', 'ticketTypes', 'eventImages', 'organizer']),
+            'data' => $event->load(['venue', 'category', 'ticketTypes', 'images', 'organizer']),
         ]);
     }
 
     // Update event details
-    public function update(Request $request, Event $event)
+    public function update(Request $request, $id)
     {
+        $event = Event::findOrFail($id);
+
         $validated = $request->validate([
-            'venue_id'    => 'sometimes|exists:venues,id',
+            'venue_id' => 'sometimes|exists:venues,id',
             'category_id' => 'sometimes|exists:categories,id',
-            'title'       => 'sometimes|string|max:255',
+            'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
-            'start_date'  => 'sometimes|date',
-            'end_date'    => 'sometimes|date|after_or_equal:start_date',
-            'status'      => 'sometimes|in:draft,published,cancelled',
+            'start_date' => 'sometimes|date',
+            'end_date' => 'sometimes|date|after_or_equal:start_date',
+            'status' => 'sometimes|in:draft,published,cancelled',
         ]);
 
         $event->update($validated);
@@ -77,13 +95,15 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Event updated successfully',
-            'data'    => $event->fresh(['venue', 'category']), 
+            'data' => $event->fresh(['venue', 'category']),
         ]);
     }
 
     // Delete event
-    public function destroy(Event $event)
+    public function destroy($id)
     {
+        $event = Event::findOrFail($id);
+
         $event->delete();
 
         return response()->json([

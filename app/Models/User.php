@@ -5,16 +5,13 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
-
 class User extends Authenticatable implements JWTSubject
 {
     /** @use HasFactory<UserFactory> */
-
     use HasFactory, Notifiable;
 
     /**
@@ -42,7 +39,7 @@ class User extends Authenticatable implements JWTSubject
         'remember_token',
     ];
 
-            // i add this two function
+    // i add this two function
     /**
      * Get the attributes that should be cast.
      *
@@ -55,6 +52,7 @@ class User extends Authenticatable implements JWTSubject
             'password' => 'hashed',
         ];
     }
+
     /**
      * Get the identifier that will be stored in the JWT.
      */
@@ -71,10 +69,21 @@ class User extends Authenticatable implements JWTSubject
         return [];
     }
 
-
     public function profile()
     {
         return $this->hasOne(Profile::class);
+    }
+
+    /**
+     * Make sure every user has a profile record.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (User $user) {
+            if (! $user->profile()->exists()) {
+                $user->profile()->create();
+            }
+        });
     }
 
     /**

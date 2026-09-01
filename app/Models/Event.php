@@ -50,6 +50,11 @@ class Event extends Model
     {
         return $this->hasMany(EventImg::class);
     }
+
+    public function eventImages(): HasMany
+    {
+        return $this->images();
+    }
     public function ticketTypes(): HasMany
     {
         return $this->hasMany(TicketType::class);

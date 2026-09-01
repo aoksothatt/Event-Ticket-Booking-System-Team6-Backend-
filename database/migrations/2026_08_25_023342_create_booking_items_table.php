@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('booking_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('booking_id')->constrained('bookings')->cascadeOnDelete();
+            $table->foreignId('booking_id')->constrained('Booking')->cascadeOnDelete();
             $table->foreignId('ticket_type_id')->constrained('ticket_types')->cascadeOnDelete();
             $table->integer('quantity');
             $table->decimal('unit_price', 10, 2);

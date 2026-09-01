@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BookingItem extends Model
 {
-    //
     protected $fillable = [
         'booking_id',
         'ticket_type_id',
@@ -16,4 +15,14 @@ class BookingItem extends Model
         'subtotal',
 
     ];
+
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class);
+    }
+
+    public function ticketType(): BelongsTo
+    {
+        return $this->belongsTo(TicketType::class);
+    }
 }

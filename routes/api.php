@@ -1,123 +1,101 @@
 <?php
 
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\EmailOTPController;
+use App\Http\Controllers\Auth\ProfileController;
+use App\Http\Controllers\BookingController;
+use App\Http\Controllers\BookingItemController;
+use App\Http\Controllers\CategoriesController;
+use App\Http\Controllers\CheckInController;
+use App\Http\Controllers\EventsController;
+use App\Http\Controllers\OrganizerController;
+use App\Http\Controllers\PaymentsController;
+use App\Http\Controllers\ReviewsController;
+use App\Http\Controllers\TicketTypeController;
+use App\Http\Controllers\UsersController;
+use App\Http\Controllers\VenuesController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\Auth\EmailOTPController;
-use App\Http\Controllers\CategoriesController;
-use App\Http\Controllers\EventsController;
-use App\Http\Controllers\OrganizerController;
-use App\Http\Controllers\UsersController;
-use App\Http\Controllers\VenuesController;
+/* Public routes */
+Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
+Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
+Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword'])->name('otp.send');
+Route::post('/otp/verify', [EmailOTPController::class, 'verifyOTP'])->name('otp.verify');
+Route::post('/reset', [EmailOTPController::class, 'resetPassword'])->name('password.reset');
 
-/*
-|--------------------------------------------------------------------------
-| PUBLIC ROUTES (no auth)
-|--------------------------------------------------------------------------
-*/
-
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
-
-Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword']);
-Route::post('/otp/verify', [EmailOTPController::class, 'verify']);
-Route::post('/reset', [EmailOTPController::class, 'resetPassword']);
-
-// Public browsing (anyone can view listings)
 Route::get('/organizers', [OrganizerController::class, 'index'])->name('organizers.index');
-Route::get('/organizers/{id}', [OrganizerController::class, 'show'])->name('organizer.show');
-Route::get('/venues', [VenuesController::class, 'index']);
-Route::get('/venues/{venue}', [VenuesController::class, 'show']);
-Route::get('/events', [EventsController::class, 'index']);
-Route::get('/events/{event}', [EventsController::class, 'show']);
-Route::get('/categories', [CategoriesController::class, 'index']);
+Route::get('/organizers/{id}', [OrganizerController::class, 'show'])->name('organizers.show');
+Route::get('/venues', [VenuesController::class, 'index'])->name('venues.index');
+Route::get('/venues/{id}', [VenuesController::class, 'show'])->name('venues.show');
+Route::get('/events', [EventsController::class, 'index'])->name('events.index');
+Route::get('/events/{id}', [EventsController::class, 'show'])->name('events.show');
+Route::get('/categories', [CategoriesController::class, 'index'])->name('categories.index');
+Route::get('/ticket-types', [TicketTypeController::class, 'index'])->name('ticket-types.index');
+Route::get('/ticket-types/{id}', [TicketTypeController::class, 'show'])->name('ticket-types.show');
+Route::get('/reviews', [ReviewsController::class, 'index'])->name('reviews.index');
+Route::get('/reviews/{id}', [ReviewsController::class, 'show'])->name('reviews.show');
 
-/*
-|--------------------------------------------------------------------------
-| AUTHENTICATED ROUTES (any logged-in role)
-|--------------------------------------------------------------------------
-*/
-Route::middleware(['auth:api'])->group(function () {
+/* Authenticated routes */
+Route::middleware('auth:api')->group(function () {
+    Route::get('/user', static fn (Request $request) => response()->json([
+        'success' => true,
+        'data' => $request->user(),
+    ]))->name('auth.user');
+    Route::get('/me', [AuthController::class, 'me'])->name('auth.me');
+    Route::post('/logout', [AuthController::class, 'logout'])->name('auth.logout');
 
-    // Current authenticated user
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
-
-    // Current user profile info from JWT
-    Route::get('/me', [AuthController::class, 'me']);
-    Route::post('/logout', [AuthController::class, 'logout']);
-
-    // Apply to become an organizer (customer -> organizer)
+    Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
+    Route::match(['put', 'patch'], '/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'changePassword'])->name('profile.password.update');
+    Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar'])->name('profile.avatar.store');
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
 });
 
-/*
-|--------------------------------------------------------------------------
-| ADMIN ROUTES (role:admin only)
-|--------------------------------------------------------------------------
-*/
+/* Administrator routes */
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
-
-    // Full user management
     Route::apiResource('users', UsersController::class);
-
-    // Category management
-    Route::post('/categories', [CategoriesController::class, 'store']);
-    Route::put('/categories/{id}', [CategoriesController::class, 'update']);
-    Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
-
-    // Venue management
-    Route::post('/venues', [VenuesController::class, 'store']);
-    Route::put('/venues/{venue}', [VenuesController::class, 'update']);
-    Route::delete('/venues/{venue}', [VenuesController::class, 'destroy']);
-
-    // Organizer management (delete / force etc.)
-    Route::delete('/organizer/{id}', [OrganizerController::class, 'destroy'])->name('organizers.destroy');
+    Route::post('/categories', [CategoriesController::class, 'store'])->name('categories.store');
+    Route::match(['put', 'patch'], '/categories/{id}', [CategoriesController::class, 'update'])->name('categories.update');
+    Route::delete('/categories/{id}', [CategoriesController::class, 'destroy'])->name('categories.destroy');
+    Route::post('/venues', [VenuesController::class, 'store'])->name('venues.store');
+    Route::match(['put', 'patch'], '/venues/{id}', [VenuesController::class, 'update'])->name('venues.update');
+    Route::delete('/venues/{id}', [VenuesController::class, 'destroy'])->name('venues.destroy');
+    Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy'])->name('organizers.destroy');
 });
 
-/*
-|--------------------------------------------------------------------------
-| ORGANIZER ROUTES (role:organizer + admin override)
-|--------------------------------------------------------------------------
-*/
+/* Organizer and administrator routes */
 Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
+    Route::post('/events', [EventsController::class, 'store'])->name('events.store');
+    Route::match(['put', 'patch'], '/events/{id}', [EventsController::class, 'update'])->name('events.update');
+    Route::delete('/events/{id}', [EventsController::class, 'destroy'])->name('events.destroy');
+    Route::match(['put', 'patch'], '/organizers/{id}', [OrganizerController::class, 'update'])->name('organizers.update');
 
-    // Manage own events
-    Route::post('/events', [EventsController::class, 'store']);
-    Route::put('/events/{event}', [EventsController::class, 'update']);
-    Route::delete('/events/{event}', [EventsController::class, 'destroy']);
+    Route::post('/ticket-types', [TicketTypeController::class, 'store'])->name('ticket-types.store');
+    Route::match(['put', 'patch'], '/ticket-types/{id}', [TicketTypeController::class, 'update'])->name('ticket-types.update');
+    Route::delete('/ticket-types/{id}', [TicketTypeController::class, 'destroy'])->name('ticket-types.destroy');
 
-    // Update own organizer profile
-    Route::put('/organizers/{id}', [OrganizerController::class, 'update'])->name('organizer.update');
+    Route::get('/check-ins', [CheckInController::class, 'index'])->name('check-ins.index');
+    Route::post('/check-ins', [CheckInController::class, 'store'])->name('check-ins.store');
+    Route::get('/check-ins/{id}', [CheckInController::class, 'show'])->name('check-ins.show');
+    Route::match(['put', 'patch'], '/check-ins/{id}', [CheckInController::class, 'update'])->name('check-ins.update');
 });
 
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER ROUTES (role:customer + organizer/admin view override)
-|--------------------------------------------------------------------------
-*/
+/* Customer, organizer, and administrator routes */
 Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
+    Route::get('/bookings', [BookingController::class, 'index'])->name('bookings.index');
+    Route::post('/bookings', [BookingController::class, 'store'])->name('bookings.store');
+    Route::get('/bookings/{id}', [BookingController::class, 'show'])->name('bookings.show');
+    Route::match(['put', 'patch'], '/bookings/{id}', [BookingController::class, 'update'])->name('bookings.update');
+    Route::delete('/bookings/{id}', [BookingController::class, 'destroy'])->name('bookings.destroy');
 
-    // Example: customer books, organizer/admin can view everything
-    // Route::post('/bookings', [BookingController::class, 'store']);
-    // Route::get('/bookings', [BookingController::class, 'index']);
-    // Route::get('/bookings/{id}', [BookingController::class, 'show']);
+    Route::get('/booking-items', [BookingItemController::class, 'index'])->name('booking-items.index');
+    Route::get('/booking-items/{id}', [BookingItemController::class, 'show'])->name('booking-items.show');
 
-    // Example: leave a review
-    // Route::post('/reviews', [ReviewsController::class, 'store']);
+    Route::post('/reviews', [ReviewsController::class, 'store'])->name('reviews.store');
+    Route::match(['put', 'patch'], '/reviews/{id}', [ReviewsController::class, 'update'])->name('reviews.update');
+    Route::delete('/reviews/{id}', [ReviewsController::class, 'destroy'])->name('reviews.destroy');
 
-    // Example: make a payment
-    // Route::post('/payments', [PaymentsController::class, 'store']);
-
-    // Example: own profile management
-    // Route::get('/profile', [ProfileController::class, 'show']);
-    // Route::put('/profile', [ProfileController::class, 'update']);
-
-
-
-    // BookingController, ReviewsController, PaymentsController, and ProfileController here
-
-
+    Route::get('/payments', [PaymentsController::class, 'index'])->name('payments.index');
+    Route::post('/payments', [PaymentsController::class, 'store'])->name('payments.store');
 });
