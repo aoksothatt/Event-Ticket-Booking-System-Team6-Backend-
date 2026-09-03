@@ -47,7 +47,7 @@ class EventsController extends Controller
             'start_time' => 'nullable|date_format:H:i',
             'end_time' => 'nullable|date_format:H:i|after:start_time',
 
-            'banner' => 'nullable|string|max:255',
+            'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
 
             'status' => 'nullable|in:draft,published,cancelled',
         ]);
