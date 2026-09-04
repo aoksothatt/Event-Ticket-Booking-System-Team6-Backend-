@@ -43,12 +43,12 @@ class CategoriesController extends Controller
             'description' => 'nullable|string',
             'status' => 'nullable|in:active,inactive',
         ]);
-        $categorys = Category::update($category);
+        $category->update($request->validated());
 
         return response()->json([
-            "message" => "create category succesfully",
+            "message" => "update category succesfully",
             "status" => true,
-            "data" => $categorys
+            "data" => $category
         ]);
     }
     public function destroy($id)

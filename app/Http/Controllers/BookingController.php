@@ -14,9 +14,11 @@ class BookingController extends Controller
         $bookings = Booking::with([
             'user',
             'event',
+            'event.venue',
             'items.ticketType',
             'payments'
         ])->latest()->get();
+
         return response()->json([
             'success' => true,
             'data' => $bookings
@@ -93,7 +95,8 @@ class BookingController extends Controller
             'data' => $booking->load(
                 'items.ticketType',
                 'event',
-                'user'
+                'user',
+                'tickets'
             )
         ], 201);
     }
@@ -101,10 +104,12 @@ class BookingController extends Controller
     public function show($id){
         $booking = Booking::with([
             'user',
-            'events',
+            'event',
+            'event.venue',
             'items.ticketType',
             'payments',
-            'checkIns'
+            'checkIns',
+            'tickets.ticketType',
         ])->findOrFail($id);
 
         return response()->json([
@@ -120,12 +125,28 @@ class BookingController extends Controller
             'status' => 'required|string|max:30',
         ]);
 
-        $booking->update($validated);
+        $oldStatus = $booking->status;
+        $newStatus = $validated['status'];
+
+        DB::transaction(function () use ($booking, $oldStatus, $newStatus, $validated) {
+            // When a booking moves away from pending/confirmed to a cancelled
+            // state, release the reserved inventory back to the ticket types.
+            $restoreInventory = in_array($oldStatus, ['pending', 'confirmed'], true)
+                && in_array($newStatus, ['cancelled', 'rejected', 'failed'], true);
+
+            if ($restoreInventory) {
+                foreach ($booking->items as $item) {
+                    $item->ticketType()->increment('sold_quantity', -$item->quantity);
+                }
+            }
+
+            $booking->update($validated);
+        });
 
         return response()->json([
             'success' =>true,
             'message' => "Booking updated successfully",
-            'data' => $booking
+            'data' => $booking->fresh(['items.ticketType'])
         ]);
     }
 

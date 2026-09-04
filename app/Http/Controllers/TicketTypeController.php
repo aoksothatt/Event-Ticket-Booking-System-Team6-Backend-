@@ -12,7 +12,7 @@ class TicketTypeController extends Controller
 
     public function index()
     {
-        $ticketType = TicketType::get();
+        $ticketType = TicketType::with('event')->get();
         return response()->json([
             'message' => "get all ticket",
             'status' => true,

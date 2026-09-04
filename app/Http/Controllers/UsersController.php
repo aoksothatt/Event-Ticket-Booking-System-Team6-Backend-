@@ -34,6 +34,8 @@ class UsersController extends Controller
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
             'role' => 'nullable|string|in:admin,organizer,customer',
+            'phone' => 'nullable|string|max:20',
+            'status' => 'nullable|string|in:active,inactive,suspended',
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
@@ -65,6 +67,8 @@ class UsersController extends Controller
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
             'password' => 'nullable|string|min:6',
             'role' => 'sometimes|string|in:admin,organizer,customer',
+            'phone' => 'nullable|string|max:20',
+            'status' => 'sometimes|string|in:active,inactive,suspended',
         ]);
 
         if (! empty($validated['password'])) {

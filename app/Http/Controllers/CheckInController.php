@@ -7,18 +7,20 @@ use Illuminate\Http\Request;
 
 class CheckInController extends Controller
 {
-    public function index (){
+    public function index()
+    {
         return response()->json([
             'success' => true,
             'data' => CheckIn::with([
-                'booking' ,
+                'booking',
                 'checkedBy'
             ])->latest()->get()
         ]);
     }
 
-    public function store(Request $request){
-        $validated = $request ->validate([
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
             'booking_id' => 'required|exists:Booking,id',
             'checked_by' => 'required|exists:users,id',
             'status' => 'required|string|max:20',
@@ -29,18 +31,19 @@ class CheckInController extends Controller
         $checkIn = CheckIn::create($validated);
 
         return response()->json([
-            'success' =>true,
+            'success' => true,
             'message' => ' Check-in successfully',
             'data' => $checkIn->load([
-                'booking' ,
+                'booking',
                 'checkedBy'
             ])
-        ],201);
+        ], 201);
     }
 
-    public function show($id){
+    public function show($id)
+    {
         $checkIn = CheckIn::with([
-            'booking' ,
+            'booking',
             'checkedBy'
 
         ])->findOrFail($id);
@@ -52,13 +55,14 @@ class CheckInController extends Controller
         ]);
     }
 
-    public function update(Request $request ,$id){
+    public function update(Request $request, $id)
+    {
         $checkIn = CheckIn::findOrFail($id);
 
 
         $validated = $request->validate([
-                'status' => 'required|string|max:20',
-            ]);
+            'status' => 'required|string|max:20',
+        ]);
 
 
         $checkIn->update($validated);
@@ -70,3 +74,4 @@ class CheckInController extends Controller
         ]);
     }
 }
+
