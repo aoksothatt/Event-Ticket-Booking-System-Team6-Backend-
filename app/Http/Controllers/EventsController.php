@@ -4,13 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 
 class EventsController extends Controller
 {
     // get all events with search, filter, and pagination
     public function index(Request $request)
     {
-        $events = Event::with(['venue', 'category', 'images'])
+        $events = Event::with(['venue', 'category', 'organizer', 'images'])
             ->when($request->search, function ($query, $search) {
                 $query->where('title', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%");
@@ -52,9 +54,25 @@ class EventsController extends Controller
             'status' => 'nullable|in:draft,published,cancelled',
         ]);
 
+        // Auto-generate slug from title if not provided
+        if (empty($validated['slug'])) {
+            $validated['slug'] = Str::slug($validated['title']);
+            if (empty($validated['slug'])) {
+                $validated['slug'] = 'event-' . now()->timestamp;
+            }
+        }
 
+        // Ensure description is never null (DB column is NOT NULL)
+        $validated['description'] = $validated['description'] ?? '';
 
-        $validated['organizer_id'] = $request->user()?->id ?? $request->input('organizer_id');
+        // Store the uploaded banner image instead of its temp path
+        if ($request->hasFile('banner')) {
+            $validated['banner'] = $request->file('banner')->store('events', 'public');
+        } elseif ($request->exists('banner') && !$request->hasFile('banner')) {
+            unset($validated['banner']);
+        }
+
+        // Use the organizer selected in the form (already validated as existing)
         $event = Event::create($validated);
 
         return response()->json([
@@ -81,14 +99,34 @@ class EventsController extends Controller
         $event = Event::findOrFail($id);
 
         $validated = $request->validate([
+            'organizer_id' => 'sometimes|exists:organizers,id',
             'venue_id' => 'sometimes|exists:venues,id',
             'category_id' => 'sometimes|exists:categories,id',
             'title' => 'sometimes|string|max:255',
+            'slug' => 'nullable|string|max:255|unique:events,slug,' . $id,
             'description' => 'nullable|string',
             'start_date' => 'sometimes|date',
             'end_date' => 'sometimes|date|after_or_equal:start_date',
+            'start_time' => 'nullable|date_format:H:i',
+            'end_time' => 'nullable|date_format:H:i|after:start_time',
+            'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'status' => 'sometimes|in:draft,published,cancelled',
         ]);
+
+        // Auto-generate slug from title if not provided
+        if (empty($validated['slug'])) {
+            $validated['slug'] = Str::slug($validated['title'] ?? $event->title);
+            if (empty($validated['slug'])) {
+                $validated['slug'] = 'event-' . now()->timestamp;
+            }
+        }
+
+        // Store the uploaded banner image instead of its temp path
+        if ($request->hasFile('banner')) {
+            $validated['banner'] = $request->file('banner')->store('events', 'public');
+        } elseif ($request->exists('banner') && !$request->hasFile('banner')) {
+            unset($validated['banner']);
+        }
 
         $event->update($validated);
 

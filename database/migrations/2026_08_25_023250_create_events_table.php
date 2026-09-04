@@ -20,7 +20,7 @@ return new class extends Migration
             // Event Detail
             $table->string('title');
             $table->string('slug')->unique();
-            $table->text('description');
+            $table->text('description')->nullable();
             $table->date('start_date');
             $table->date('end_date');
             $table->time('start_time');

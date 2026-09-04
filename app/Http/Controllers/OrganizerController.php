@@ -69,7 +69,7 @@ class OrganizerController extends Controller
         return  response()->json([
             'success' => true,
             'message' => 'Organizer update successfully',
-            'data ' => $organizer
+            'data' => $organizer
         ]);
 
     }

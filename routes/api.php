@@ -7,10 +7,12 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingItemController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CheckInController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventsController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\PaymentsController;
 use App\Http\Controllers\ReviewsController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UsersController;
 use App\Http\Controllers\VenuesController;
@@ -54,6 +56,7 @@ Route::middleware('auth:api')->group(function () {
 
 /* Administrator routes */
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
+    Route::get('/admin/dashboard', [DashboardController::class, 'index'])->name('admin.dashboard');
     Route::apiResource('users', UsersController::class);
     Route::post('/categories', [CategoriesController::class, 'store'])->name('categories.store');
     Route::match(['put', 'patch'], '/categories/{id}', [CategoriesController::class, 'update'])->name('categories.update');
@@ -79,6 +82,12 @@ Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
     Route::post('/check-ins', [CheckInController::class, 'store'])->name('check-ins.store');
     Route::get('/check-ins/{id}', [CheckInController::class, 'show'])->name('check-ins.show');
     Route::match(['put', 'patch'], '/check-ins/{id}', [CheckInController::class, 'update'])->name('check-ins.update');
+
+    // Actual customer tickets (admin/organizer) + QR verify/cancel.
+    Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
+    Route::get('/tickets/{id}', [TicketController::class, 'show'])->name('tickets.show');
+    Route::post('/tickets/verify', [TicketController::class, 'verify'])->name('tickets.verify');
+    Route::post('/tickets/{id}/cancel', [TicketController::class, 'cancel'])->name('tickets.cancel');
 });
 
 /* Customer, organizer, and administrator routes */
@@ -91,6 +100,9 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
 
     Route::get('/booking-items', [BookingItemController::class, 'index'])->name('booking-items.index');
     Route::get('/booking-items/{id}', [BookingItemController::class, 'show'])->name('booking-items.show');
+
+    // Customer's actual tickets (one record per purchased seat).
+    Route::get('/my-tickets', [TicketController::class, 'myTickets'])->name('tickets.my');
 
     Route::post('/reviews', [ReviewsController::class, 'store'])->name('reviews.store');
     Route::match(['put', 'patch'], '/reviews/{id}', [ReviewsController::class, 'update'])->name('reviews.update');
