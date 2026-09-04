@@ -20,7 +20,7 @@ class CheckIn extends Model
 
     public function booking(): BelongsTo
     {
-        return $this->belongsTo(Booking::class);
+        return $this->belongsTo(booking::class);
     }
     public function checkedBy(): BelongsTo
     {
