@@ -5,100 +5,88 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
-    /**
-     * Register a new user.
-     */
     public function register(Request $request)
     {
-        // Validate registration data
-        $request->validate([
-            'name' => 'required|string',
-            'email' => 'required|string|email|unique:users,email',
-            'password' => 'required|string|min:6|confirmed',
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        // Create the user.
-        //
-        // The password is automatically hashed because
-        // User.php contains:
-        //
-        // 'password' => 'hashed'
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => $request->password,
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => 'customer',
+            'status' => 'active',
         ]);
 
-        // Generate JWT token
-
-        $token = JWTAuth::fromUser($user);
-
-        return response()->json([
-            'message' => 'User registered successfully',
-            'user' => $user,
-            'access_token' => $token,
-            'token_type' => 'bearer',
-        ], 201);
+        return $this->tokenResponse(JWTAuth::fromUser($user), $user, 201);
     }
 
-
-    /**
-     * Login user.
-     */
     public function login(Request $request)
     {
-        // Validate login data
         $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
         ]);
 
-        // Attempt to authenticate
-        $token = JWTAuth::attempt($credentials);
-
-        // Wrong email/password
-        if (!$token) {
+        if (! $token = Auth::guard('api')->attempt($credentials)) {
             return response()->json([
-                'message' => 'Invalid email or password',
+                'success' => false,
+                'message' => 'Invalid email or password.',
             ], 401);
         }
 
-        // Login successful
-        return response()->json([
-            'message' => 'Login successful',
-            'access_token' => $token,
-            'token_type' => 'bearer',
-            'user' => JWTAuth::user(),
-        ]);
+        /** @var User $user */
+        $user = Auth::guard('api')->user();
+
+        if ($user->status !== 'active') {
+            Auth::guard('api')->logout();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'This account is inactive.',
+            ], 403);
+        }
+
+        return $this->tokenResponse($token, $user);
     }
 
-
-    /**
-     * Get currently authenticated user.
-     */
-    public function me()
+    public function me(Request $request)
     {
         return response()->json([
-            'user' => JWTAuth::user(),
+            'success' => true,
+            'data' => $request->user()->load('profile'),
         ]);
     }
 
-
-    /**
-     * Logout user.
-     *
-     * The current JWT token will be invalidated.
-     */
     public function logout()
     {
-        JWTAuth::invalidate(JWTAuth::getToken());
+        Auth::guard('api')->logout();
 
         return response()->json([
-            'message' => 'Successfully logged out',
+            'success' => true,
+            'message' => 'Logged out successfully.',
         ]);
+    }
+
+    private function tokenResponse(string $token, User $user, int $status = 200)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'access_token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
+                'user' => $user->fresh()->load('profile'),
+            ],
+        ], $status);
     }
 }

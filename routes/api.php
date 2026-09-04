@@ -50,6 +50,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::match(['put', 'patch'], '/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'changePassword'])->name('profile.password.update');
+    Route::post('/profile/change-password', [ProfileController::class, 'changePassword'])->name('profile.password.change');
     Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar'])->name('profile.avatar.store');
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
 });

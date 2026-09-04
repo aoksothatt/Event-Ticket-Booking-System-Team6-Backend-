@@ -10,7 +10,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::rename('bookings', 'Booking');
+        // Fresh installs already create the final table name. Existing installs
+        // from before that change still have the lowercase name.
+        if (Schema::hasTable('bookings') && ! Schema::hasTable('Booking')) {
+            Schema::rename('bookings', 'Booking');
+        }
     }
 
     /**
@@ -18,6 +22,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::rename('Booking', 'bookings');
+        if (Schema::hasTable('Booking') && ! Schema::hasTable('bookings')) {
+            Schema::rename('Booking', 'bookings');
+        }
     }
 };
