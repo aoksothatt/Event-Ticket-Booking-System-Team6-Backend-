@@ -9,6 +9,7 @@ use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CheckInController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventsController;
+use App\Http\Controllers\FavoritesController;
 use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\PaymentsController;
 use App\Http\Controllers\ReviewsController;
@@ -31,6 +32,8 @@ Route::get('/organizers/{id}', [OrganizerController::class, 'show'])->name('orga
 Route::get('/venues', [VenuesController::class, 'index'])->name('venues.index');
 Route::get('/venues/{id}', [VenuesController::class, 'show'])->name('venues.show');
 Route::get('/events', [EventsController::class, 'index'])->name('events.index');
+// Registered before `/events/{id}` so "trending" isn't captured by {id}.
+Route::get('/events/trending', [EventsController::class, 'trending'])->name('events.trending');
 Route::get('/events/{id}', [EventsController::class, 'show'])->name('events.show');
 Route::get('/categories', [CategoriesController::class, 'index'])->name('categories.index');
 Route::get('/ticket-types', [TicketTypeController::class, 'index'])->name('ticket-types.index');
@@ -53,6 +56,11 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/profile/change-password', [ProfileController::class, 'changePassword'])->name('profile.password.change');
     Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar'])->name('profile.avatar.store');
     Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
+
+    // Favorites (scoped to the authenticated user only)
+    Route::get('/user/favorites', [FavoritesController::class, 'index'])->name('favorites.index');
+    Route::post('/events/{event}/favorite', [FavoritesController::class, 'store'])->name('favorites.store');
+    Route::delete('/events/{event}/favorite', [FavoritesController::class, 'destroy'])->name('favorites.destroy');
 });
 
 /* Administrator routes */
@@ -66,6 +74,7 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::match(['put', 'patch'], '/venues/{id}', [VenuesController::class, 'update'])->name('venues.update');
     Route::delete('/venues/{id}', [VenuesController::class, 'destroy'])->name('venues.destroy');
     Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy'])->name('organizers.destroy');
+    Route::patch('/admin/events/{id}/trending', [EventsController::class, 'setTrending'])->name('admin.events.trending');
 });
 
 /* Organizer and administrator routes */

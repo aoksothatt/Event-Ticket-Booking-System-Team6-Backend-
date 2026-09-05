@@ -12,7 +12,7 @@ class EventsController extends Controller
     // get all events with search, filter, and pagination
     public function index(Request $request)
     {
-        $events = Event::with(['venue', 'category', 'organizer', 'images'])
+        $events = Event::with(['venue', 'category', 'organizer', 'images', 'ticketTypes'])
             ->when($request->search, function ($query, $search) {
                 $query->where('title', 'like', "%{$search}%")
                     ->orWhere('description', 'like', "%{$search}%");
@@ -26,6 +26,50 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'data' => $events,
+        ]);
+    }
+
+    /**
+     * Trending events for the customer homepage.
+     * Driven by the admin's manual `is_trending` selection — only published,
+     * still-active events are returned so drafts and past events never leak in.
+     */
+    public function trending()
+    {
+        $events = Event::with(['venue', 'category', 'organizer', 'images', 'ticketTypes'])
+            ->where('is_trending', true)
+            ->where('status', 'published')
+            ->whereDate('end_date', '>=', now()->toDateString())
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $events,
+        ]);
+    }
+
+    /**
+     * Manually set an event's trending status (admin-only).
+     */
+    public function setTrending(Request $request, $id)
+    {
+        $event = Event::findOrFail($id);
+
+        $validated = $request->validate([
+            'is_trending' => 'required|boolean',
+        ]);
+
+        $event->update([
+            'is_trending' => $validated['is_trending'],
+        ]);
+
+        $message = $event->is_trending ? 'Event added to Trending.' : 'Event removed from Trending.';
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $event->fresh(['venue', 'category', 'organizer', 'images', 'ticketTypes']),
         ]);
     }
 
@@ -111,6 +155,7 @@ class EventsController extends Controller
             'end_time' => 'nullable|date_format:H:i|after:start_time',
             'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
             'status' => 'sometimes|in:draft,published,cancelled',
+            'is_trending' => 'sometimes|boolean',
         ]);
 
         // Auto-generate slug from title if not provided

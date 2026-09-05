@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
@@ -77,6 +78,15 @@ class User extends Authenticatable implements JWTSubject
     public function tickets()
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    /**
+     * Events the user has favorited.
+     */
+    public function favorites(): BelongsToMany
+    {
+        return $this->belongsToMany(Event::class, 'event_favorites')
+            ->withTimestamps();
     }
 
     /**
