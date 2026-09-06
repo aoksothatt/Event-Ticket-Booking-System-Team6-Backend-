@@ -12,7 +12,10 @@ class CheckInController extends Controller
         return response()->json([
             'success' => true,
             'data' => CheckIn::with([
-                'booking',
+                'booking.user',
+                'booking.event',
+                'ticket.ticketType.event',
+                'ticket.user',
                 'checkedBy'
             ])->latest()->get()
         ]);

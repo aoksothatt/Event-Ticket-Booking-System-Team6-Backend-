@@ -2,88 +2,93 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\organizer;
+use App\Models\Organizer;
 use Illuminate\Http\Request;
 
 class OrganizerController extends Controller
 {
-    // Get /api/organizers
-    public function index(){
-        $organizers = organizer::with('user')->latest()->get();
+    // GET /api/organizers
+    public function index()
+    {
+        $organizers = Organizer::with('user')
+            ->latest()
+            ->get();
 
         return response()->json([
             'success' => true,
             'data' => $organizers
-        ]);
+        ], 200);
     }
-    // Post/api/organizers
 
-    public function store(Request $request){
+    // POST /api/organizers
+    public function store(Request $request)
+    {
         $validated = $request->validate([
-            'user_id'=>'required|exists:users,id',
-            'company_name'=>'nullable|string|max:150',
-            'company_logo'=>'nullable|string|max:150',
-            'phone'=>'nullable|string|max:20',
-            'website'=>'nullable|string|max:255',
-            'description'=>'nullable|string',
-            'is_verified'=>'boolean',
+            'user_id' => 'required|exists:users,id',
+            'company_name' => 'nullable|string|max:150',
+            'company_logo' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'website' => 'nullable|url|max:255',
+            'description' => 'nullable|string',
+            'is_verified' => 'sometimes|boolean',
         ]);
 
-        $organizer = organizer::create($validated);
-
-        return response()->json(
-            [
-                'success' =>true,
-                'message' =>"Organizer create successfully",
-                'data' =>$organizer
-            ],201);
-    }
-
-
-    //get/ api / organizer/{id}
-
-    public function show($id){
-        $organizer = organizer::with('user','events')->findOrFail($id);
+        $organizer = Organizer::create($validated);
 
         return response()->json([
             'success' => true,
-            'data' =>$organizer
-        ]);
+            'message' => 'Organizer created successfully',
+            'data' => $organizer
+        ], 201);
     }
 
-    // put /api /organizers/{id}
+    // GET /api/organizers/{id}
+    public function show($id)
+    {
+        $organizer = Organizer::with([
+            'user',
+            'events'
+        ])->findOrFail($id);
 
-    public function update(Request $request, $id){
-        $organizer = organizer::findOrFail($id);
+        return response()->json([
+            'success' => true,
+            'data' => $organizer
+        ], 200);
+    }
+
+    // PUT /api/organizers/{id}
+    public function update(Request $request, $id)
+    {
+        $organizer = Organizer::findOrFail($id);
 
         $validated = $request->validate([
             'company_name' => 'nullable|string|max:150',
-            'company_logo' =>'nullable|string|max:255',
-            'phone' =>'nullable|string|max:20',
-            'website'=>'nullable|string|max:255',
+            'company_logo' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'website' => 'nullable|url|max:255',
             'description' => 'nullable|string',
-            'is_verified' =>'boolean',
+            'is_verified' => 'sometimes|boolean',
         ]);
-        $organizer ->update($validated);
 
-        return  response()->json([
+        $organizer->update($validated);
+
+        return response()->json([
             'success' => true,
-            'message' => 'Organizer update successfully',
+            'message' => 'Organizer updated successfully',
             'data' => $organizer
-        ]);
-
+        ], 200);
     }
 
-    // delete /api/ organizers/{id}
-
-    public function destroy($id){
-        $organizer = organizer::findOrFail($id);
+    // DELETE /api/organizers/{id}
+    public function destroy($id)
+    {
+        $organizer = Organizer::findOrFail($id);
 
         $organizer->delete();
 
         return response()->json([
             'success' => true,
             'message' => 'Organizer deleted successfully'
-        ]);
+        ], 200);
     }
 }

@@ -84,7 +84,10 @@ class TicketController extends Controller
         ]);
 
         $ticket = Ticket::with(['ticketType.event', 'user', 'booking'])
-            ->where('qr_token', $validated['qr_token'])
+            ->where(function ($q) use ($validated) {
+                $q->where('qr_token', $validated['qr_token'])
+                  ->orWhere('ticket_code', $validated['qr_token']);
+            })
             ->first();
 
         if (! $ticket) {
