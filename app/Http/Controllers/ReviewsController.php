@@ -21,19 +21,39 @@ class ReviewsController extends Controller
     {
         $validated = $request->validate([
             'event_id' => 'required|exists:events,id',
-            'user_id' => 'required|exists:users,id',
             'rating' => 'required|integer|min:1|max:5',
             'comment' => 'nullable|string',
-            'status' => 'required|string|max:20',
         ]);
 
-        $review = Review::create($validated);
+        // Attribute the review to the authenticated customer instead of
+        // trusting whatever user_id is sent by the client.
+        $review = Review::create([
+            'event_id' => $validated['event_id'],
+            'user_id' => $request->user()->id,
+            'rating' => $validated['rating'],
+            'comment' => $validated['comment'] ?? null,
+            'status' => $validated['status'] ?? 'active',
+        ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Review created successfully',
-            'data' => $review
+            'data' => $review->load('user', 'event')
         ], 201);
+    }
+
+    /**
+     * Reviews belonging to the authenticated customer (for their dashboard).
+     */
+    public function my(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => Review::with('event')
+                ->where('user_id', $request->user()->id)
+                ->latest()
+                ->get()
+        ]);
     }
 
     public function show($id)
@@ -49,7 +69,9 @@ class ReviewsController extends Controller
 
     public function update(Request $request, $id)
     {
-        $review = Review::findOrFail($id);
+        $review = Review::where('id', $id)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
 
         $validated = $request->validate([
             'rating' => 'sometimes|integer|min:1|max:5',
@@ -66,9 +88,12 @@ class ReviewsController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        Review::findOrFail($id)->delete();
+        Review::where('id', $id)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail()
+            ->delete();
 
         return response()->json([
             'success' => true,

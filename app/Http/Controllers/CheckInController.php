@@ -21,23 +21,47 @@ class CheckInController extends Controller
         ]);
     }
 
+    /**
+     * Check-ins belonging to the authenticated customer (for their dashboard).
+     */
+    public function my(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => CheckIn::with([
+                'booking.event',
+                'ticket.ticketType.event',
+            ])
+                ->whereHas('booking', fn ($q) => $q->where('user_id', $request->user()->id))
+                ->latest()
+                ->get()
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
             'booking_id' => 'required|exists:Booking,id',
-            'checked_by' => 'required|exists:users,id',
+            'ticket_id' => 'nullable|exists:tickets,id',
             'status' => 'required|string|max:20',
         ]);
 
-        $validated['checked_in_at'] = now();
-
-        $checkIn = CheckIn::create($validated);
+        // The actor who performs the check-in is always the authenticated
+        // user (admin/organizer/scanner), never a value from the client.
+        $checkIn = CheckIn::create([
+            'booking_id' => $validated['booking_id'],
+            'ticket_id' => $validated['ticket_id'] ?? null,
+            'checked_by' => $request->user()->id,
+            'checked_in_at' => now(),
+            'status' => $validated['status'],
+        ]);
 
         return response()->json([
             'success' => true,
             'message' => ' Check-in successfully',
             'data' => $checkIn->load([
                 'booking',
+                'ticket',
                 'checkedBy'
             ])
         ], 201);

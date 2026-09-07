@@ -45,9 +45,16 @@ class EmailOTPController extends Controller
         ]);
 
         // Send email to user
-        Mail::to($user->email)->send(
-            new EmailVerificationOTP($otp, $user->name)
-        );
+        try {
+            Mail::to($user->email)->send(
+                new EmailVerificationOTP($otp, $user->name)
+            );
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send OTP email. Please try again.',
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,
@@ -120,7 +127,7 @@ class EmailOTPController extends Controller
             'message' => 'OTP verified successfully.',
             'data' => [
                 'reset_token' => $resetToken,
-                'expires_in' => 600,
+                'expires_in' => 300,
             ],
         ]);
     }

@@ -114,6 +114,12 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
     // Customer's actual tickets (one record per purchased seat).
     Route::get('/my-tickets', [TicketController::class, 'myTickets'])->name('tickets.my');
 
+    // Customer-scoped activity (payments, check-ins, reviews) for their dashboard.
+    Route::get('/my/summary', [DashboardController::class, 'my'])->name('dashboard.my');
+    Route::get('/my/payments', [PaymentsController::class, 'my'])->name('payments.my');
+    Route::get('/my/check-ins', [CheckInController::class, 'my'])->name('check-ins.my');
+    Route::get('/my/reviews', [ReviewsController::class, 'my'])->name('reviews.my');
+
     Route::post('/reviews', [ReviewsController::class, 'store'])->name('reviews.store');
     Route::match(['put', 'patch'], '/reviews/{id}', [ReviewsController::class, 'update'])->name('reviews.update');
     Route::delete('/reviews/{id}', [ReviewsController::class, 'destroy'])->name('reviews.destroy');
