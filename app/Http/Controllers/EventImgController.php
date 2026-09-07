@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Storage;
 
 class EventImgController extends Controller
 {
-    // Get all 
+    // Get all
     public function index()
     {
         $images = EventImg::with('event')
@@ -114,4 +114,4 @@ class EventImgController extends Controller
             'message' => 'Event image deleted successfully',
         ]);
     }
-}
+}   
