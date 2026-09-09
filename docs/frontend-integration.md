@@ -1,7 +1,13 @@
 # Bakong Payment — Frontend Integration (Vue 3)
 
 Full flow: select event → pick ticket type → quantity → **`POST /api/checkout`**
-→ show KHQR + countdown → poll every 10 s → paid? → success page + tickets.
+→ show KHQR + countdown → poll **`POST /api/payments/{id}/verify`** every ~15 s
+→ paid? → success page + tickets.
+
+> The `GET /api/payments/{id}/status` endpoint is **local-only** — it never asks
+> Bakong. `verify` is the call that actually checks the transaction and, if
+> paid, confirms the booking and issues tickets (idempotent server-side). Use
+> `verify` for the authoritative loop, `status` only for display.
 
 The API client is already added at `src/api/bakongApi.js` (uses the existing
 `src/api/http.js` axios instance, so JWT auth and 401 handling are automatic).
@@ -34,7 +40,6 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
   createBakongCheckout,
-  getPaymentStatus,
   verifyPayment,
   formatCountdown,
 } from "../api/bakongApi";
@@ -55,7 +60,8 @@ const paymentId = ref(null);
 const countdown = ref("15:00");
 const status = ref("pending");
 
-let timer = null;
+let verifyTimer = null;
+let countdownTimer = null;
 
 onMounted(async () => {
   try {
@@ -73,8 +79,8 @@ onMounted(async () => {
     expiresAt.value = res.data.expires_at;
     paymentId.value = res.data.payment.id;
 
-    startPolling();
     startCountdown();
+    startVerifyLoop();
   } catch (e) {
     error.value = e?.response?.data?.message || "Unable to start checkout.";
   } finally {
@@ -82,10 +88,11 @@ onMounted(async () => {
   }
 });
 
-function startPolling() {
-  timer = setInterval(async () => {
+function startVerifyLoop() {
+  // `verify` checks Bakong and is idempotent — safe to call on an interval.
+  verifyTimer = setInterval(async () => {
     try {
-      const res = await getPaymentStatus(paymentId.value);
+      const res = await verifyPayment(paymentId.value);
       status.value = res.data.status;
       if (status.value === "paid") {
         stopTimers();
@@ -96,7 +103,7 @@ function startPolling() {
     } catch {
       /* transient — keep polling */
     }
-  }, 10000); // 5–10 s per the spec
+  }, 15000);
 }
 
 function startCountdown() {
@@ -108,13 +115,14 @@ function startCountdown() {
     }
   };
   tick();
-  timer && clearInterval(timer);
-  timer = setInterval(tick, 1000);
+  countdownTimer = setInterval(tick, 1000);
 }
 
 function stopTimers() {
-  clearInterval(timer);
-  timer = null;
+  clearInterval(verifyTimer);
+  clearInterval(countdownTimer);
+  verifyTimer = null;
+  countdownTimer = null;
 }
 
 onBeforeUnmount(stopTimers);
