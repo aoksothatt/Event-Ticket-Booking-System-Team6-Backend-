@@ -17,12 +17,16 @@ class Booking extends Model
         'event_id',
         'booking_date',
         'total_amount',
+        'discount',
+        'service_fee',
         'status',
     ];
 
     protected $casts = [
         'booking_date' => 'datetime',
         'total_amount' => 'decimal:2',
+        'discount' => 'decimal:2',
+        'service_fee' => 'decimal:2',
     ];
 
     public function user(): BelongsTo
@@ -45,8 +49,30 @@ class Booking extends Model
         return $this->hasMany(Payments::class, 'booking_id');
     }
 
+    /**
+     * The provider-agnostic payment records for this booking.
+     */
+    public function paymentRecords(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'booking_id');
+    }
+
+    /**
+     * The most recent active payment for this booking (used for polling).
+     */
+    public function latestPayment(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(Payment::class, 'booking_id')
+            ->latestOfMany();
+    }
+
     public function checkIns(): HasMany
     {
         return $this->hasMany(CheckIn::class);
+    }
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(Ticket::class);
     }
 }

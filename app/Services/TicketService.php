@@ -4,6 +4,12 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\Ticket;
+use Endroid\QrCode\Builder\Builder;
+use Endroid\QrCode\Encoding\Encoding;
+use Endroid\QrCode\ErrorCorrectionLevel;
+use Endroid\QrCode\RoundBlockSizeMode;
+use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class TicketService
@@ -48,16 +54,78 @@ class TicketService
      */
     protected function createForItem(Booking $booking, $item)
     {
-        return Ticket::create([
+        $ticketNumber = $this->uniqueTicketNumber();
+        $qrToken = $this->uniqueQrToken();
+
+        $ticket = Ticket::create([
             'booking_id'      => $booking->id,
             'booking_item_id' => $item->id,
             'ticket_type_id'  => $item->ticket_type_id,
             'user_id'         => $booking->user_id,
             'ticket_code'     => $this->uniqueTicketCode(),
-            'qr_token'        => $this->uniqueQrToken(),
+            'ticket_number'   => $ticketNumber,
+            'qr_token'        => $qrToken,
             'status'          => 'active',
+            'issued_at'       => now(),
             'used_at'         => null,
         ]);
+
+        $this->attachQrImage($ticket);
+
+        return $ticket;
+    }
+
+    /**
+     * Render and store the ticket's QR code image (public disk) containing
+     * the verifiable data encoded for the check-in scanner.
+     */
+    protected function attachQrImage(Ticket $ticket): void
+    {
+        try {
+            $payload = json_encode([
+                'ticket_id' => $ticket->id,
+                'booking_id' => $ticket->booking_id,
+                'event_id' => $ticket->booking?->event_id,
+                'security_hash' => $ticket->qr_token,
+            ]);
+
+            $result = Builder::create()
+                ->writer(new PngWriter())
+                ->data((string) $payload)
+                ->encoding(new Encoding('UTF-8'))
+                ->errorCorrectionLevel(ErrorCorrectionLevel::High)
+                ->size(300)
+                ->margin(10)
+                ->roundBlockSizeMode(RoundBlockSizeMode::Margin)
+                ->build();
+
+            $path = 'tickets/qr-' . $ticket->qr_token . '.png';
+            Storage::disk('public')->put($path, $result->getString());
+
+            $ticket->update(['qr_code' => $path]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Could not generate ticket QR image.', [
+                'ticket_id' => $ticket->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Generate a unique sequential, human-readable ticket number.
+     *
+     * Example: EVT-2026-000042
+     */
+    protected function uniqueTicketNumber(): string
+    {
+        $year = now()->year;
+
+        do {
+            $sequence = Ticket::max('id') + 1;
+            $number = sprintf('EVT-%d-%06d', $year, $sequence);
+        } while (Ticket::where('ticket_number', $number)->exists());
+
+        return $number;
     }
 
     /**
