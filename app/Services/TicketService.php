@@ -64,7 +64,7 @@ class TicketService
             'event_id' => $event->id,
             'ticket_code' => $this->uniqueTicketCode(),
             'qr_token' => $this->uniqueQrToken(),
-            'status' => Ticket::DONE,
+            'status' => Ticket::ACTIVE,
             'expired_at' => $this->eventEndTimestamp($event),
             'used_at' => null,
         ]);
