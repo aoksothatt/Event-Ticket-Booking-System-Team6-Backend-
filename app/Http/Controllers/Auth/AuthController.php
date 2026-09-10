@@ -2,74 +2,53 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exceptions\AuthenticationException;
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Resources\UserResource;
+use App\Services\AuthService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
-    public function register(Request $request)
+    public function __construct(
+        private readonly AuthService $authService,
+    ) {}
+
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
+        $result = $this->authService->register(
+            $request->validated('name'),
+            $request->validated('email'),
+            $request->validated('password'),
+        );
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-            'role' => 'customer',
-            'status' => 'active',
-        ]);
-
-        return $this->tokenResponse(JWTAuth::fromUser($user), $user, 201);
+        return $this->tokenResponse($result['token'], $result['user'], 201);
     }
 
-    public function login(Request $request)
+    public function login(LoginRequest $request): JsonResponse
     {
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string'],
-        ]);
+        $result = $this->authService->login(
+            $request->validated('email'),
+            $request->validated('password'),
+        );
 
-        if (! $token = Auth::guard('api')->attempt($credentials)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid email or password.',
-            ], 401);
-        }
-
-        /** @var User $user */
-        $user = Auth::guard('api')->user();
-
-        if ($user->status !== 'active') {
-            Auth::guard('api')->logout();
-
-            return response()->json([
-                'success' => false,
-                'message' => 'This account is inactive.',
-            ], 403);
-        }
-
-        return $this->tokenResponse($token, $user);
+        return $this->tokenResponse($result['token'], $result['user']);
     }
 
-    public function me(Request $request)
+    public function me(Request $request): JsonResponse
     {
         return response()->json([
             'success' => true,
-            'data' => $request->user()->load('profile'),
+            'data' => new UserResource($request->user()->load('profile')),
         ]);
     }
 
-    public function logout()
+    public function logout(Request $request): JsonResponse
     {
-        Auth::guard('api')->logout();
+        $this->authService->logout($request->user());
 
         return response()->json([
             'success' => true,
@@ -77,15 +56,29 @@ class AuthController extends Controller
         ]);
     }
 
-    private function tokenResponse(string $token, User $user, int $status = 200)
+    public function refresh(): JsonResponse
+    {
+        try {
+            $result = $this->authService->refresh();
+        } catch (AuthenticationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 401);
+        }
+
+        return $this->tokenResponse($result['token'], $result['user']);
+    }
+
+    private function tokenResponse(string $token, $user, int $status = 200): JsonResponse
     {
         return response()->json([
             'success' => true,
             'data' => [
                 'access_token' => $token,
                 'token_type' => 'bearer',
-                'expires_in' => Auth::guard('api')->factory()->getTTL() * 60,
-                'user' => $user->fresh()->load('profile'),
+                'expires_in' => auth('api')->factory()->getTTL() * 60,
+                'user' => new UserResource($user->load('profile')),
             ],
         ], $status);
     }

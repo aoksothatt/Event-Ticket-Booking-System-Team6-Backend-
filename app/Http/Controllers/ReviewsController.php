@@ -13,7 +13,7 @@ class ReviewsController extends Controller
             'success' => true,
             'data' => Review::with('user', 'event')
                 ->latest()
-                ->get()
+                ->get(),
         ]);
     }
 
@@ -25,20 +25,33 @@ class ReviewsController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        // Attribute the review to the authenticated customer instead of
-        // trusting whatever user_id is sent by the client.
+        $userId = $request->user()->id;
+
+        // Check if the user has already reviewed this event
+        $existing = Review::where('event_id', $validated['event_id'])
+            ->where('user_id', $userId)
+            ->first();
+
+        if ($existing) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You have already reviewed this event. Use PUT to update your review.',
+                'data' => $existing->load('user', 'event'),
+            ], 409);
+        }
+
         $review = Review::create([
             'event_id' => $validated['event_id'],
-            'user_id' => $request->user()->id,
+            'user_id' => $userId,
             'rating' => $validated['rating'],
             'comment' => $validated['comment'] ?? null,
-            'status' => $validated['status'] ?? 'active',
+            'status' => 'active',
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Review created successfully',
-            'data' => $review->load('user', 'event')
+            'data' => $review->load('user', 'event'),
         ], 201);
     }
 
@@ -52,7 +65,7 @@ class ReviewsController extends Controller
             'data' => Review::with('event')
                 ->where('user_id', $request->user()->id)
                 ->latest()
-                ->get()
+                ->get(),
         ]);
     }
 
@@ -63,7 +76,7 @@ class ReviewsController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $review
+            'data' => $review,
         ]);
     }
 
@@ -84,7 +97,7 @@ class ReviewsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Review updated successfully',
-            'data' => $review
+            'data' => $review,
         ]);
     }
 
@@ -97,7 +110,7 @@ class ReviewsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Review deleted successfully'
+            'message' => 'Review deleted successfully',
         ]);
     }
 }

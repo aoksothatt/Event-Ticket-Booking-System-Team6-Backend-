@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\Role;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
@@ -71,14 +73,52 @@ class User extends Authenticatable implements JWTSubject
         return [];
     }
 
-    public function profile()
+    public function profile(): HasOne
     {
         return $this->hasOne(Profile::class);
     }
 
-    public function tickets()
+    public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    public function eventStaff(): HasMany
+    {
+        return $this->hasMany(EventStaff::class);
+    }
+
+    public function staffCheckins(): HasMany
+    {
+        return $this->hasMany(TicketCheckin::class, 'staff_id');
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
+    /**
+     * The organizer profile owned by this user (organizer role).
+     */
+    public function organizerProfile(): HasOne
+    {
+        return $this->hasOne(Organizer::class);
+    }
+
+    /**
+     * The organizer this user is acting for — organisers own a profile,
+     * event staff inherit the organizer they are assigned to.
+     */
+    public function activeOrganizer(): ?Organizer
+    {
+        if ($this->role === Role::ORGANIZER->value) {
+            return $this->organizerProfile;
+        }
+
+        return $this->eventStaff()
+            ->where('is_active', true)
+            ->first()?->organizer;
     }
 
     /**
@@ -116,11 +156,7 @@ class User extends Authenticatable implements JWTSubject
      */
     public function hasPermission(string $permission): bool
     {
-        if ($this->role === 'admin') {
-            return true;
-        }
-
-        return in_array($permission, config("permissions.roles.{$this->role}", []), true);
+        return $this->hasAnyPermission($permission);
     }
 
     /**
@@ -129,12 +165,23 @@ class User extends Authenticatable implements JWTSubject
      */
     public function hasAnyPermission(string ...$permissions): bool
     {
-        if ($this->role === 'admin') {
+        if ($this->role === Role::ADMIN->value) {
             return true;
         }
 
         $granted = config("permissions.roles.{$this->role}", []);
 
         return count(array_intersect($permissions, $granted)) > 0;
+    }
+
+    /**
+     * True when the user has the event_staff role AND is assigned to an organizer.
+     */
+    public function belongsToOrganizer(int $organizerId): bool
+    {
+        return $this->eventStaff()
+            ->where('organizer_id', $organizerId)
+            ->where('is_active', true)
+            ->exists();
     }
 }

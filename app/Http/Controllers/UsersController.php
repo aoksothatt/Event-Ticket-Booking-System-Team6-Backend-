@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -33,7 +34,7 @@ class UsersController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
-            'role' => 'nullable|string|in:admin,organizer,customer',
+            'role' => ['nullable', 'string', Rule::in(Role::values())],
             'phone' => 'nullable|string|max:20',
             'status' => 'nullable|string|in:active,inactive,suspended',
         ]);
@@ -66,7 +67,7 @@ class UsersController extends Controller
             'name' => 'sometimes|string|max:255',
             'email' => ['sometimes', 'email', Rule::unique('users')->ignore($user->id)],
             'password' => 'nullable|string|min:6',
-            'role' => 'sometimes|string|in:admin,organizer,customer',
+            'role' => ['sometimes', 'string', Rule::in(Role::values())],
             'phone' => 'nullable|string|max:20',
             'status' => 'sometimes|string|in:active,inactive,suspended',
         ]);
