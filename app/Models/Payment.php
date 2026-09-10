@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $bakong_md5
  * @property string|null $bakong_transaction_id
  * @property string|null $qr_payload
+ * @property string|null $deeplink
  * @property string|null $currency
  * @property string $amount
  * @property string $status   pending|paid|failed|expired|cancelled
@@ -57,6 +58,7 @@ class Payment extends Model
         'bakong_md5',
         'bakong_transaction_id',
         'qr_payload',
+        'deeplink',
         'currency',
         'amount',
         'status',

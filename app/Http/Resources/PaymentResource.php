@@ -22,6 +22,7 @@ class PaymentResource extends JsonResource
             'bakong_md5' => $this->bakong_md5,
             'bakong_transaction_id' => $this->bakong_transaction_id,
             'qr_payload' => $this->qr_payload,
+            'deeplink' => $this->deeplink,
             'currency' => $this->currency,
             'amount' => $this->amount,
             'status' => $this->status,

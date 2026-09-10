@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CreatePaymentRequest;
 use App\Http\Resources\PaymentResource;
 use App\Models\Booking;
+use App\Models\Event;
 use App\Models\Payment;
 use App\Models\TicketType;
 use App\Repositories\PaymentRepository;
 use App\Services\Bakong\BakongException;
 use App\Services\Bakong\BakongService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,10 +26,12 @@ use Illuminate\Support\Str;
  *     -> calculate total (authoritative, from DB)
  *     -> create Booking (pending)
  *     -> create Payment (pending)
- *     -> generate KHQR via Bakong
+ *     -> generate KHQR locally (PHP KHQR SDK)
+ *     -> compute MD5(KHQR)
  *     -> persist QR payload / MD5 / expiration
  *     -> commit transaction
- *     -> return booking + payment + QR to the client.
+ *     -> generate optional wallet deeplink (best-effort)
+ *     -> return booking + payment + QR + deeplink to the client.
  *
  * The controller never talks to Bakong directly; all gateway calls go
  * through BakongService and all persistence through PaymentRepository.
@@ -69,26 +73,42 @@ class CheckoutController extends Controller
 
         try {
             $result = DB::transaction(function () use ($validated, $user) {
-                // Lock the ticket row to prevent overselling under concurrency.
-                $ticketType = TicketType::lockForUpdate()->findOrFail($validated['ticket_type_id']);
-
-                if ($ticketType->event_id !== (int) $validated['event_id']) {
-                    throw new \Illuminate\Validation\ValidationException(
-                        validator([], []),
-                        response()->json([
-                            'success' => false,
-                            'message' => 'The ticket type does not belong to the selected event.',
-                        ], 422)
+                // Verify the event exists and is bookable.
+                $event = Event::find($validated['event_id']);
+                if (! $event) {
+                    throw new \RuntimeException('This event no longer exists.', 404);
+                }
+                if ($event->status !== 'published') {
+                    throw new \RuntimeException(
+                        $event->status === 'cancelled'
+                            ? 'This event has been cancelled and tickets are no longer available.'
+                            : 'This event is not currently available for booking.'
                     );
                 }
 
+                // Lock the ticket row to prevent overselling under concurrency.
+                $ticketType = TicketType::lockForUpdate()->find($validated['ticket_type_id']);
+
+                if (! $ticketType) {
+                    throw new \RuntimeException('This ticket type is no longer available.');
+                }
+
+                if ($ticketType->event_id !== (int) $validated['event_id']) {
+                    throw new \RuntimeException('The selected ticket does not belong to this event.');
+                }
+
                 if ($ticketType->status !== 'active') {
-                    throw new \RuntimeException('This ticket type is not currently available for sale.');
+                    throw new \RuntimeException('This ticket type is not currently on sale.');
                 }
 
                 $available = (int) $ticketType->quantity - (int) $ticketType->sold_quantity;
                 if ($validated['quantity'] > $available) {
-                    throw new \RuntimeException('Not enough tickets available.');
+                    if ($available === 0) {
+                        throw new \RuntimeException('Sorry, this ticket type is sold out.');
+                    }
+                    throw new \RuntimeException(
+                        "Only {$available} ticket(s) remaining. You requested {$validated['quantity']}."
+                    );
                 }
 
                 // Authoritative pricing — never trust a client-supplied amount.
@@ -133,10 +153,12 @@ class CheckoutController extends Controller
                     'expires_at' => now()->addMinutes((int) config('bakong.qr_expiration_minutes', 15)),
                 ]);
 
-                // Call Bakong inside the transaction so that a failed QR
-                // generation rolls the whole checkout back atomically.
+                // Generate the KHQR LOCALLY with the PHP KHQR SDK (no server
+                // side Bakong QR endpoint is involved). This happens inside
+                // the transaction so the booking + payment roll back together
+                // if local QR generation unexpectedly fails.
                 try {
-                    $qr = $this->bakongService->generateQr(
+                    $qr = $this->bakongService->generateKhqr(
                         $totalAmount,
                         $reference,
                         ['booking_number' => $booking->booking_number]
@@ -147,7 +169,7 @@ class CheckoutController extends Controller
 
                 $payment->update([
                     'bakong_md5' => $qr['md5'],
-                    'qr_payload' => $qr['qr'],
+                    'qr_payload' => $qr['khqr'],
                     'raw_request' => [],
                     'expires_at' => $qr['expires_at'],
                 ]);
@@ -160,7 +182,9 @@ class CheckoutController extends Controller
             });
         } catch (BakongException $e) {
             Log::channel('bakong')->error('Checkout aborted due to Bakong error.', [
+                'user_id' => $user->id,
                 'message' => $e->getMessage(),
+                'http_status' => $e->getHttpStatus(),
             ]);
             return response()->json([
                 'success' => false,
@@ -169,15 +193,46 @@ class CheckoutController extends Controller
         } catch (\Illuminate\Validation\ValidationException $e) {
             return $e->getResponse();
         } catch (\RuntimeException $e) {
+            $status = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 422;
+            Log::channel('bakong')->error('Checkout aborted due to runtime error.', [
+                'user_id' => $user->id ?? null,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
-            ], 422);
+            ], $status);
+        } catch (\Throwable $e) {
+            Log::channel('bakong')->error('Checkout aborted due to unexpected error.', [
+                'user_id' => $user->id ?? null,
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'An unexpected error occurred during checkout. Please try again.',
+            ], 500);
+        }
+
+        // Optional wallet deeplink — generated AFTER commit so a transient
+        // deeplink failure can never roll the booking back. The KHQR payment
+        // remains fully usable if this is skipped.
+        $deeplink = $this->bakongService->generateDeeplink($result['qr']['khqr'], [
+            'booking_number' => $result['booking']->booking_number,
+        ]);
+
+        if (is_string($deeplink) && $deeplink !== '') {
+            $result['payment']->update(['deeplink' => $deeplink]);
         }
 
         Log::channel('bakong')->info('Checkout completed.', [
             'booking_id' => $result['booking']->id,
             'payment_id' => $result['payment']->id,
+            'has_deeplink' => is_string($deeplink) && $deeplink !== '',
         ]);
 
         return response()->json([
@@ -185,8 +240,10 @@ class CheckoutController extends Controller
             'message' => 'Checkout initiated. Scan the KHQR to pay.',
             'data' => [
                 'booking' => $result['booking'],
-                'payment' => new PaymentResource($result['payment']->load('booking')),
-                'qr_payload' => $result['qr']['qr'],
+                'payment' => new PaymentResource($result['payment']->fresh('booking')),
+                'qr_payload' => $result['qr']['khqr'],
+                'md5' => $result['qr']['md5'],
+                'deeplink' => $deeplink,
                 'expires_at' => $result['payment']->expires_at?->toIso8601String(),
                 'amount' => $result['payment']->amount,
                 'currency' => $result['payment']->currency,

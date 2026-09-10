@@ -81,13 +81,16 @@ class PaymentFlowTest extends TestCase
         ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
 
         $this->mock(BakongService::class)
-            ->shouldReceive('generateQr')
+            ->shouldReceive('generateKhqr')
             ->once()
             ->andReturn([
                 'md5' => 'md5-checkout-1',
-                'qr' => '000201010212khqrpayload',
+                'khqr' => '000201010212khqrpayload',
                 'expires_at' => now()->addMinutes(15)->toIso8601String(),
-            ]);
+            ])
+            ->shouldReceive('generateDeeplink')
+            ->once()
+            ->andReturn('https://bakong.page.link/short');
 
         $response = $this->withHeaders($this->authHeaders($user))
             ->postJson('/api/checkout', [
@@ -168,7 +171,7 @@ class PaymentFlowTest extends TestCase
         ]);
 
         $this->mock(BakongService::class)
-            ->shouldReceive('checkTransaction')
+            ->shouldReceive('checkTransactionByMd5')
             ->once()
             ->with('md5-verify-1')
             ->andReturn([
@@ -235,7 +238,7 @@ class PaymentFlowTest extends TestCase
 
         // The verifier should return early without calling Bakong because the
         // payment is already paid.
-        $this->mock(BakongService::class)->shouldReceive('checkTransaction')->never();
+        $this->mock(BakongService::class)->shouldReceive('checkTransactionByMd5')->never();
 
         $this->withHeaders($this->authHeaders($user))
             ->postJson('/api/payments/'.$payment->id.'/verify')
@@ -271,7 +274,7 @@ class PaymentFlowTest extends TestCase
             'expires_at' => now()->subMinutes(1),
         ]);
 
-        $this->mock(BakongService::class)->shouldReceive('checkTransaction')->never();
+        $this->mock(BakongService::class)->shouldReceive('checkTransactionByMd5')->never();
 
         $this->withHeaders($this->authHeaders($user))
             ->postJson('/api/payments/'.$payment->id.'/verify')
@@ -384,7 +387,7 @@ class PaymentFlowTest extends TestCase
         config(['bakong.webhook_secret' => 'test-webhook-secret']);
 
         $mocked = $this->mock(BakongService::class);
-        $mocked->shouldReceive('checkTransaction')
+        $mocked->shouldReceive('checkTransactionByMd5')
             ->with('md5-webhook-1')
             ->andReturn([
                 'status' => 'paid',
@@ -412,7 +415,7 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(1, Ticket::where('booking_id', $booking->id)->count());
 
         // Re-delivery (replay): should be idempotent and not generate more tickets.
-        $mocked->shouldReceive('checkTransaction')->never();
+        $mocked->shouldReceive('checkTransactionByMd5')->never();
 
         $makeWebhookCall()->assertOk()->assertJsonPath('data.status', 'paid');
         $this->assertSame(1, Ticket::where('booking_id', $booking->id)->count(), 'Replayed webhook must not generate duplicate tickets.');

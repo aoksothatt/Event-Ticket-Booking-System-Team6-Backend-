@@ -12,6 +12,12 @@ use Illuminate\Support\Facades\Log;
  * Thin, provider-specific HTTP client for the Bakong (NBC) Open API.
  * This class owns the request/response details (headers, endpoints,
  * auth, retries). It has no business logic — that lives in BakongService.
+ *
+ * The KHQR string itself is generated locally by the PHP KHQR SDK
+ * (khqr-gateway/bakong-khqr-php); this client never asks Bakong to
+ * generate a QR code — that endpoint does not exist. It is only used for
+ * the endpoints Bakong actually exposes: tokens, deeplinks, and
+ * transaction lookups.
  */
 class BakongApi
 {
@@ -31,11 +37,24 @@ class BakongApi
     }
 
     /**
-     * Generate a KHQR payment code.
+     * Generate a wallet deeplink for a locally-generated KHQR string.
+     *
+     * The deeplink endpoint receives the completed KHQR and returns a short
+     * link that opens the payment in a supported mobile wallet app. It does
+     * NOT generate (or need to generate) the KHQR itself.
+     *
+     * Per the Bakong Open API spec this endpoint does not require a bearer
+     * token; we still accept one so callers can choose to send it.
      */
-    public function generateQr(array $payload, ?string $token = null): Response
+    public function generateDeeplink(string $khqr, ?array $sourceInfo = null, ?string $token = null): Response
     {
-        return $this->send('post', '/KHQR/generate', $payload, $token);
+        $payload = ['qr' => $khqr];
+
+        if (is_array($sourceInfo) && $sourceInfo !== []) {
+            $payload['sourceInfo'] = $sourceInfo;
+        }
+
+        return $this->send('post', '/generate_deeplink_by_qr', $payload, $token);
     }
 
     /**
@@ -65,6 +84,7 @@ class BakongApi
             'method' => $method,
             'url' => $url,
             'payload' => $data,
+            'has_token' => $token !== null && $token !== '',
         ]);
 
         $request = Http::timeout($this->timeout)
@@ -75,21 +95,24 @@ class BakongApi
             ]);
 
         if ($token !== null && $token !== '') {
-            $request->withHeaders(['Authorization' => 'Bearer ' . $token]);
+            $request = $request->withHeader('Authorization', 'Bearer ' . $token);
         }
 
         try {
             $response = $request->{$method}($url, $data);
 
+            $logBody = $response->json() ?? ['_raw' => $response->body()];
+
             Log::channel('bakong')->info('BAKONG RESPONSE', [
                 'status' => $response->status(),
-                'body' => $response->json(),
+                'body' => $logBody,
             ]);
 
             return $response;
         } catch (\Throwable $e) {
             Log::channel('bakong')->error('BAKONG REQUEST FAILED', [
                 'url' => $url,
+                'method' => $method,
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);

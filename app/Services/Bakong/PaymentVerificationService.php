@@ -53,7 +53,7 @@ class PaymentVerificationService
         }
 
         try {
-            $result = $this->bakongService->checkTransaction($payment->bakong_md5);
+            $result = $this->bakongService->checkTransactionByMd5($payment->bakong_md5);
         } catch (BakongException $e) {
             Log::channel('bakong')->warning('Verification failed for payment.', [
                 'payment_id' => $payment->id,

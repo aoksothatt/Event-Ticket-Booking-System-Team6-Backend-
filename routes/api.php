@@ -23,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /* Public routes */
+
 Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
 Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
 Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword'])->name('otp.send');
@@ -58,7 +59,7 @@ Route::post('/payments/webhook', [PaymentController::class, 'webhook'])
 
 /* Authenticated routes */
 Route::middleware('auth:api')->group(function () {
-    Route::get('/user', static fn (Request $request) => response()->json([
+    Route::get('/user', static fn(Request $request) => response()->json([
         'success' => true,
         'data' => $request->user(),
     ]))->name('auth.user');
@@ -126,6 +127,9 @@ Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
     Route::post('/tickets/verify', [TicketController::class, 'verify'])->name('tickets.verify');
     Route::post('/tickets/{id}/cancel', [TicketController::class, 'cancel'])->name('tickets.cancel');
 });
+
+
+
 
 /* Customer, organizer, and administrator routes */
 Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
