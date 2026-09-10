@@ -19,13 +19,19 @@ class Ticket extends Model
         'ticket_type_id',
         'user_id',
         'ticket_code',
+        'ticket_number',
         'qr_token',
+        'qr_code',
         'status',
         'used_at',
+        'issued_at',
+        'checked_in_at',
     ];
 
     protected $casts = [
         'used_at' => 'datetime',
+        'issued_at' => 'datetime',
+        'checked_in_at' => 'datetime',
     ];
 
     public function booking(): BelongsTo

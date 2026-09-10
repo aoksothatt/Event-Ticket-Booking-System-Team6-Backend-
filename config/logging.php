@@ -123,6 +123,14 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        'bakong' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/bakong.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('BAKONG_LOG_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],

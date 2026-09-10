@@ -7,10 +7,12 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingItemController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CheckInController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventsController;
 use App\Http\Controllers\FavoritesController;
 use App\Http\Controllers\OrganizerController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaymentsController;
 use App\Http\Controllers\ReviewsController;
 use App\Http\Controllers\TicketController;
@@ -21,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /* Public routes */
+
 Route::post('/register', [AuthController::class, 'register'])->name('auth.register');
 Route::post('/login', [AuthController::class, 'login'])->name('auth.login');
 Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword'])->name('otp.send');
@@ -41,9 +44,22 @@ Route::get('/ticket-types/{id}', [TicketTypeController::class, 'show'])->name('t
 Route::get('/reviews', [ReviewsController::class, 'index'])->name('reviews.index');
 Route::get('/reviews/{id}', [ReviewsController::class, 'show'])->name('reviews.show');
 
+/*
+|--------------------------------------------------------------------------
+| Bakong Payment Module
+|--------------------------------------------------------------------------
+| The webhook is public (authenticated by shared secret) so that Bakong can
+| deliver asynchronous payment notifications. All other payment endpoints
+| require an authenticated customer.
+*/
+
+// Public: Bakong webhook callback (verify signature in controller).
+Route::post('/payments/webhook', [PaymentController::class, 'webhook'])
+    ->name('payments.webhook');
+
 /* Authenticated routes */
 Route::middleware('auth:api')->group(function () {
-    Route::get('/user', static fn (Request $request) => response()->json([
+    Route::get('/user', static fn(Request $request) => response()->json([
         'success' => true,
         'data' => $request->user(),
     ]))->name('auth.user');
@@ -61,6 +77,18 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/user/favorites', [FavoritesController::class, 'index'])->name('favorites.index');
     Route::post('/events/{event}/favorite', [FavoritesController::class, 'store'])->name('favorites.store');
     Route::delete('/events/{event}/favorite', [FavoritesController::class, 'destroy'])->name('favorites.destroy');
+
+    // Checkout: create a booking + payment and generate a KHQR to pay.
+    Route::post('/checkout', [CheckoutController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('checkout.store');
+
+    // Payment polling + verification.
+    Route::get('/payments/{payment}', [PaymentController::class, 'show'])->name('payments.bakong.show');
+    Route::get('/payments/{payment}/status', [PaymentController::class, 'status'])->name('payments.status');
+    Route::post('/payments/{payment}/verify', [PaymentController::class, 'verify'])
+        ->middleware('throttle:30,1')
+        ->name('payments.verify');
 });
 
 /* Administrator routes */
@@ -99,6 +127,9 @@ Route::middleware(['auth:api', 'role:organizer,admin'])->group(function () {
     Route::post('/tickets/verify', [TicketController::class, 'verify'])->name('tickets.verify');
     Route::post('/tickets/{id}/cancel', [TicketController::class, 'cancel'])->name('tickets.cancel');
 });
+
+
+
 
 /* Customer, organizer, and administrator routes */
 Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function () {
