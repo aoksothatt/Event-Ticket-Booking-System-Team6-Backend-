@@ -12,8 +12,13 @@ class VenueSeeder extends Seeder
         Venue::firstOrCreate(
             ['name' => 'National Stadium'],
             [
-                'location' => 'Phnom Penh',
+                'address' => 'Sangkat Chaktomuk, Khan Daun Penh',
+                'city' => 'Phnom Penh',
+                'province' => null,
+                'country' => 'Cambodia',
                 'capacity' => 50000,
+                'description' => 'The national sports stadium of Cambodia.',
+                'status' => 'active',
             ]
         );
     }

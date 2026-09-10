@@ -14,6 +14,7 @@ use App\Http\Controllers\FavoritesController;
 use App\Http\Controllers\Organizer\DashboardController as OrganizerDashboardController;
 use App\Http\Controllers\Organizer\StaffController as OrganizerStaffController;
 use App\Http\Controllers\OrganizerController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaymentsController;
 use App\Http\Controllers\ReviewsController;
 use App\Http\Controllers\Staff\CheckInController as StaffCheckInController;
@@ -119,20 +120,6 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::post('/staff', [OrganizerStaffController::class, 'store']);
     Route::put('/staff/{id}', [OrganizerStaffController::class, 'update']);
     Route::delete('/staff/{id}', [OrganizerStaffController::class, 'destroy']);
-});
-
-/* ----- Legacy admin routes (kept for frontend compatibility) ----- */
-Route::middleware(['auth:api', 'role:admin'])->group(function () {
-    Route::get('/admin/dashboard', [DashboardController::class, 'index']);
-    Route::apiResource('users', UsersController::class);
-    Route::post('/categories', [CategoriesController::class, 'store']);
-    Route::match(['put', 'patch'], '/categories/{id}', [CategoriesController::class, 'update']);
-    Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
-    Route::post('/venues', [VenuesController::class, 'store']);
-    Route::match(['put', 'patch'], '/venues/{id}', [VenuesController::class, 'update']);
-    Route::delete('/venues/{id}', [VenuesController::class, 'destroy']);
-    Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy']);
-    Route::patch('/admin/events/{id}/trending', [EventsController::class, 'setTrending']);
 });
 
 /*
