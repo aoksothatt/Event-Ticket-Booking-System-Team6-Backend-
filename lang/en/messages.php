@@ -9,6 +9,7 @@ return [
     'categories_retrieved' => 'Categories retrieved successfully.',
     'category_created' => 'Category created successfully.',
     'category_deleted' => 'Category deleted successfully.',
+    'category_retrieved' => 'Category retrieved successfully.',
     'category_updated' => 'Category updated successfully.',
     'checkin_created' => 'Check-in recorded successfully.',
     'checkin_updated' => 'Check-in updated successfully.',

@@ -81,6 +81,7 @@ Route::get('/events', [EventsController::class, 'index']);
 Route::get('/events/trending', [EventsController::class, 'trending']);
 Route::get('/events/{id}', [EventsController::class, 'show']);
 Route::get('/categories', [CategoriesController::class, 'index']);
+Route::get('/categories/{id}', [CategoriesController::class, 'show']);
 Route::get('/ticket-types', [TicketTypeController::class, 'index']);
 Route::get('/ticket-types/{id}', [TicketTypeController::class, 'show']);
 Route::get('/reviews', [ReviewsController::class, 'index']);
@@ -167,6 +168,21 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::post('/event-images', [EventImgController::class, 'store']);
     Route::match(['put', 'patch'], '/event-images/{eventImg}', [EventImgController::class, 'update']);
     Route::delete('/event-images/{eventImg}', [EventImgController::class, 'destroy']);
+});
+
+/* ----- Legacy admin CRUD aliases (frontend calls these without the /admin prefix) ----- */
+Route::middleware(['auth:api', 'role:admin'])->group(function () {
+    Route::apiResource('users', UsersController::class);
+
+    Route::post('/categories', [CategoriesController::class, 'store']);
+    Route::match(['put', 'patch'], '/categories/{id}', [CategoriesController::class, 'update']);
+    Route::delete('/categories/{id}', [CategoriesController::class, 'destroy']);
+
+    Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy']);
+
+    Route::post('/venues', [VenuesController::class, 'store']);
+    Route::match(['put', 'patch'], '/venues/{id}', [VenuesController::class, 'update']);
+    Route::delete('/venues/{id}', [VenuesController::class, 'destroy']);
 });
 
 /*

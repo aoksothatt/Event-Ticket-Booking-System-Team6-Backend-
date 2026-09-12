@@ -18,6 +18,17 @@ class CategoriesController extends Controller
         ]);
     }
 
+    public function show($id)
+    {
+        $category = Category::findOrFail($id);
+
+        return response()->json([
+            "message" => __('messages.category_retrieved'),
+            "status" => true,
+            "data" => $category
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
