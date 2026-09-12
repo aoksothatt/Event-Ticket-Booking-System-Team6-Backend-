@@ -45,7 +45,7 @@ class PaymentsController extends Controller
         if ($request->user('api')->role === 'customer' && $booking->user_id !== $request->user('api')->id) {
             return response()->json([
                 'success' => false,
-                'message' => 'You can only pay for your own bookings.',
+                'message' => __('messages.cannot_pay_others_bookings'),
             ], 403);
         }
 
@@ -91,7 +91,7 @@ class PaymentsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Payment created successfully',
+            'message' => __('messages.payment_created'),
             'data' => $payment->load('booking', 'booking.tickets')
         ], 201);
     }

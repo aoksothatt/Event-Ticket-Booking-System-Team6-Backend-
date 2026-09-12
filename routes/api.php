@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\TicketController as ApiTicketController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\EmailOTPController;
 use App\Http\Controllers\Auth\ProfileController;
@@ -7,8 +8,10 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingItemController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CheckInController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Customer\TicketController as CustomerTicketController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EventImgController;
 use App\Http\Controllers\EventsController;
 use App\Http\Controllers\FavoritesController;
 use App\Http\Controllers\Organizer\DashboardController as OrganizerDashboardController;
@@ -24,6 +27,29 @@ use App\Http\Controllers\UsersController;
 use App\Http\Controllers\VenuesController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Language switcher (public)
+|--------------------------------------------------------------------------
+*/
+Route::get('/language/{locale}', function (string $locale) {
+    if (!in_array($locale, ['en', 'km'])) {
+        return response()->json([
+            'success' => false,
+            'message' => __('messages.unsupported_language'),
+        ], 400);
+    }
+
+    session(['locale' => $locale]);
+    app()->setLocale($locale);
+
+    return response()->json([
+        'success' => true,
+        'message' => __('messages.language_changed'),
+        'locale' => $locale,
+    ]);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -60,6 +86,14 @@ Route::get('/ticket-types/{id}', [TicketTypeController::class, 'show']);
 Route::get('/reviews', [ReviewsController::class, 'index']);
 Route::get('/reviews/{id}', [ReviewsController::class, 'show']);
 
+/* ----- Event images ----- */
+Route::get('/event-images', [EventImgController::class, 'index']);
+Route::get('/event-images/{eventImg}', [EventImgController::class, 'show']);
+Route::get('/events/{event}/images', [EventImgController::class, 'eventImages']);
+
+/* ----- Bakong payment webhook (public, authenticated by signature) ----- */
+Route::post('/payments/webhook', [PaymentController::class, 'webhook']);
+
 /*
 |--------------------------------------------------------------------------
 | Authenticated routes (any role)
@@ -87,6 +121,14 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/user/favorites', [FavoritesController::class, 'index']);
     Route::post('/events/{event}/favorite', [FavoritesController::class, 'store']);
     Route::delete('/events/{event}/favorite', [FavoritesController::class, 'destroy']);
+
+    /* ----- Bakong checkout + payment polling/verification ----- */
+    Route::post('/checkout', [CheckoutController::class, 'store'])->middleware('throttle:checkout');
+    Route::get('/payments/{payment}', [PaymentController::class, 'show']);
+    Route::get('/payments/{payment}/status', [PaymentController::class, 'status']);
+    Route::post('/payments/{payment}/verify', [PaymentController::class, 'verify'])->middleware('throttle:checkout');
+
+    Route::get('/tickets/mine', [ApiTicketController::class, 'index']);
 });
 
 /*
@@ -120,6 +162,11 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::post('/staff', [OrganizerStaffController::class, 'store']);
     Route::put('/staff/{id}', [OrganizerStaffController::class, 'update']);
     Route::delete('/staff/{id}', [OrganizerStaffController::class, 'destroy']);
+
+    // Event image management.
+    Route::post('/event-images', [EventImgController::class, 'store']);
+    Route::match(['put', 'patch'], '/event-images/{eventImg}', [EventImgController::class, 'update']);
+    Route::delete('/event-images/{eventImg}', [EventImgController::class, 'destroy']);
 });
 
 /*
@@ -147,6 +194,11 @@ Route::middleware(['auth:api', 'role:organizer,admin'])->prefix('organizer')->gr
     Route::patch('/ticket-types/{id}/status', [TicketTypeController::class, 'setStatus']);
 
     Route::get('/bookings', [BookingController::class, 'index']);
+
+    // Event image management.
+    Route::post('/event-images', [EventImgController::class, 'store']);
+    Route::match(['put', 'patch'], '/event-images/{eventImg}', [EventImgController::class, 'update']);
+    Route::delete('/event-images/{eventImg}', [EventImgController::class, 'destroy']);
 });
 
 /* ----- Legacy organizer routes (kept for frontend compatibility) ----- */

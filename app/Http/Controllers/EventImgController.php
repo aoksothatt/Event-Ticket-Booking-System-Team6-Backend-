@@ -57,7 +57,7 @@ class EventImgController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Event image uploaded successfully',
+            'message' => __('messages.event_image_uploaded'),
             'data' => $eventImage->load('event'),
         ], 201);
     }
@@ -94,7 +94,7 @@ class EventImgController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Event image updated successfully',
+            'message' => __('messages.event_image_updated'),
             'data' => $eventImg->fresh('event'),
         ]);
     }
@@ -111,7 +111,7 @@ class EventImgController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Event image deleted successfully',
+            'message' => __('messages.event_image_deleted'),
         ]);
     }
 }   

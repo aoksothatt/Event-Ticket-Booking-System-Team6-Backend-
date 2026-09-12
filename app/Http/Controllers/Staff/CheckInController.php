@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CheckIn\CheckInRequest;
 use App\Http\Resources\CheckInResource;
 use App\Http\Resources\TicketResource;
-use App\Models\Ticket;
 use App\Models\TicketCheckin;
 use App\Services\CheckInService;
 use Illuminate\Http\Request;
@@ -53,7 +52,7 @@ class CheckInController extends Controller
      *
      * Status flow: DONE → ACTIVE → USED (auto-activates DONE tickets).
      *
-     * If the ticket is already used, returns 200 with the existing check-in
+     * If the ticket is already used, returns 409 with the existing check-in
      * record so the frontend can display the "already checked in" warning.
      *
      * Uses DB transaction + row lock (SELECT FOR UPDATE) to prevent
@@ -69,22 +68,6 @@ class CheckInController extends Controller
                 'status' => 'not_found',
                 'message' => 'Invalid ticket. Please check the QR code and try again.',
             ], 422);
-        }
-
-        // Already checked in — return existing record, not an error.
-        if ($ticket->status === Ticket::USED) {
-            $existing = $ticket->ticketCheckins()
-                ->latest('checked_in_at')
-                ->with('staff')
-                ->first();
-
-            return response()->json([
-                'success' => true,
-                'already_checked_in' => true,
-                'message' => 'This ticket has already been checked in.',
-                'data' => new TicketResource($ticket->fresh(['user', 'event', 'ticketType', 'booking'])),
-                'check_in' => $existing ? new CheckInResource($existing) : null,
-            ]);
         }
 
         $actor = $request->user();
@@ -115,11 +98,26 @@ class CheckInController extends Controller
                 'check_in' => new CheckInResource($ticketCheckin),
             ]);
         } catch (CheckInException $e) {
-            return response()->json([
+            $payload = [
                 'success' => false,
                 'status' => $e->status(),
                 'message' => $e->getMessage(),
-            ], 409);
+            ];
+
+            // Surface duplicate scans the same way the frontend expects for
+            // the "already checked in" banner.
+            if ($e->status() === 'used') {
+                $existing = $ticket->ticketCheckins()
+                    ->latest('checked_in_at')
+                    ->with('staff')
+                    ->first();
+
+                $payload['already_checked_in'] = true;
+                $payload['data'] = new TicketResource($ticket->fresh(['user', 'event', 'ticketType', 'booking']));
+                $payload['check_in'] = $existing ? new CheckInResource($existing) : null;
+            }
+
+            return response()->json($payload, 409);
         }
     }
 
