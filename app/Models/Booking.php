@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+use App\Models\Payment;
+
 class Booking extends Model
 {
     use HasFactory;
@@ -51,7 +53,7 @@ class Booking extends Model
 
     public function payments(): HasMany
     {
-        return $this->hasMany(Payments::class, 'booking_id');
+        return $this->hasMany(Payment::class, 'booking_id');
     }
 
     /**

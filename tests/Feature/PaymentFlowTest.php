@@ -745,7 +745,7 @@ class PaymentFlowTest extends TestCase
             ->assertJsonPath('data.status', 'pending')
             ->assertJsonPath('data.amount', '25.50');
 
-        $this->assertSame(1, \App\Models\Payments::where('booking_id', $booking->id)->count());
+        $this->assertSame(1, \App\Models\Payment::where('booking_id', $booking->id)->count());
         $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
         $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued without Bakong verification.');
     }
@@ -763,7 +763,7 @@ class PaymentFlowTest extends TestCase
             'total_amount' => 10.00,
             'status' => 'pending',
         ]);
-        \App\Models\Payments::create([
+        \App\Models\Payment::create([
             'booking_id' => $booking->id,
             'provider' => 'bakong',
             'transaction_reference' => 'PAY-SCOPE-001',

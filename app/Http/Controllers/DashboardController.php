@@ -8,7 +8,7 @@ use App\Models\CheckIn;
 use App\Models\Event;
 use App\Models\EventFavorite;
 use App\Models\Organizer;
-use App\Models\Payments;
+use App\Models\Payment;
 use App\Models\Review;
 use App\Models\Ticket;
 use App\Models\User;
@@ -24,7 +24,7 @@ class DashboardController extends Controller
         $totalEvents = Event::count();
         $totalCategories = Category::count();
         $totalVenues = Venue::count();
-        $totalRevenue = Payments::where(fn ($q) => $q->where('payment_status', 'paid')->orWhere('status', 'paid'))->sum('amount');
+        $totalRevenue = Payment::where(fn ($q) => $q->where('payment_status', 'paid')->orWhere('status', 'paid'))->sum('amount');
         $totalBookings = Booking::count();
         $pendingBookings = Booking::where('status', 'pending')->count();
         $activeEvents = Event::where('status', 'published')->count();
@@ -61,7 +61,7 @@ class DashboardController extends Controller
         $user = $request->user();
 
         $totalBookings = Booking::where('user_id', $user->id)->count();
-        $totalSpent = Payments::where(fn ($q) => $q->where('payment_status', 'paid')->orWhere('status', 'paid'))
+        $totalSpent = Payment::where(fn ($q) => $q->where('payment_status', 'paid')->orWhere('status', 'paid'))
             ->whereHas('booking', fn ($q) => $q->where('user_id', $user->id))
             ->sum('amount');
 
