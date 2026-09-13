@@ -185,6 +185,12 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::post('/venues', [VenuesController::class, 'store']);
     Route::match(['put', 'patch'], '/venues/{id}', [VenuesController::class, 'update']);
     Route::delete('/venues/{id}', [VenuesController::class, 'destroy']);
+
+    // Admin-only manual payment confirmation (for payments Bakong cannot
+    // auto-verify, e.g. the "static QR not supported" case). Registers before
+    // the broader customer payment routes so non-admins are rejected by the
+    // role:admin middleware.
+    Route::post('/payments/{payment}/confirm', [PaymentController::class, 'confirm']);
 });
 
 /*

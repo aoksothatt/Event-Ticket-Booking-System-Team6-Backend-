@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Payment;
+use Illuminate\Support\Facades\Log;
 
 /**
  * PaymentRepository
@@ -85,6 +86,30 @@ class PaymentRepository
             'status' => Payment::STATUS_CANCELLED,
             'payment_status' => 'cancelled',
         ]);
+        return $payment;
+    }
+
+    /**
+     * Mark a payment as held for manual review. This is the terminal state
+     * for payments Bakong refuses to auto-verify (static-QR case): the
+     * customer may already have paid, verification is re-attempted on the
+     * gateway no more, and an admin must confirm the received funds.
+     */
+    public function markHeld(Payment $payment, ?string $reason = null): Payment
+    {
+        if ($payment->status !== Payment::STATUS_PAID) {
+            $payment->update([
+                'status' => Payment::STATUS_HELD,
+                'payment_status' => 'held',
+            ]);
+
+            Log::channel('bakong')->warning('Payment held for manual review.', [
+                'payment_id' => $payment->id,
+                'booking_id' => $payment->booking_id,
+                'reason' => $reason,
+            ]);
+        }
+
         return $payment;
     }
 

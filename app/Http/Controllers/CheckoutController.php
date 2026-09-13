@@ -269,7 +269,7 @@ class CheckoutController extends Controller
             'qr' => [
                 'khqr' => $payment->qr_payload,
                 'md5' => $payment->bakong_md5,
-                'expires_at' => $payment->expires_at?->toIso8601String() ?? now()->addMinutes((int) config('bakong.qr_expiration_minutes', 15))->toIso8601String(),
+                'expires_at' => $payment->expires_at?->toIso8601String() ?? now()->addMinutes((int) config('bakong.qr_expiration_minutes', 1))->toIso8601String(),
             ],
         ];
     }
@@ -324,6 +324,27 @@ class CheckoutController extends Controller
             }
 
             throw new \RuntimeException('This booking has already been paid.', 409);
+        }
+
+        // A payment placed in manual review (Bakong's "static QR not
+        // supported" case) is an open claim on this booking's funds. NEVER
+        // mint a second QR for the same booking — the customer may already
+        // have paid and must not be able to pay twice. Return the held payment
+        // with no QR so the client shows the "held for review" state.
+        $held = $booking->paymentRecords()->where('status', Payment::STATUS_HELD)->latest('id')->first();
+
+        if ($held) {
+            $skipDeeplink = true;
+
+            return [
+                'booking' => $booking,
+                'payment' => $held,
+                'qr' => [
+                    'khqr' => '',
+                    'md5' => '',
+                    'expires_at' => $held->expires_at?->toIso8601String() ?? '',
+                ],
+            ];
         }
 
         // An earlier payment attempt may still be running — return its QR so
@@ -381,7 +402,7 @@ class CheckoutController extends Controller
             'amount' => $amount,
             'status' => Payment::STATUS_PENDING,
             'payment_status' => 'pending',
-            'expires_at' => now()->addMinutes((int) config('bakong.qr_expiration_minutes', 15)),
+            'expires_at' => now()->addMinutes((int) config('bakong.qr_expiration_minutes', 1)),
         ]);
 
         // Generate the KHQR LOCALLY with the PHP KHQR SDK (no server-side

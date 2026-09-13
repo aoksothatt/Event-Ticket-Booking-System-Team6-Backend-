@@ -24,7 +24,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $deeplink
  * @property string|null $currency
  * @property string $amount
- * @property string $status   pending|paid|failed|expired|cancelled
+ * @property string $status   pending|paid|failed|expired|cancelled|held
  * @property array|null $raw_request
  * @property array|null $raw_response
  * @property string|null $paid_at
@@ -39,6 +39,7 @@ class Payment extends Model
     public const STATUS_FAILED = 'failed';
     public const STATUS_EXPIRED = 'expired';
     public const STATUS_CANCELLED = 'cancelled';
+    public const STATUS_HELD = 'held';
 
     public const PROVIDER_BAKONG = 'bakong';
 
@@ -48,6 +49,7 @@ class Payment extends Model
         self::STATUS_FAILED,
         self::STATUS_EXPIRED,
         self::STATUS_CANCELLED,
+        self::STATUS_HELD,
     ];
 
     protected $fillable = [
@@ -88,6 +90,15 @@ class Payment extends Model
         return $this->status === self::STATUS_PAID;
     }
 
+    /**
+     * True when the payment was received but cannot be auto-verified through
+     * the gateway (held for manual/administrative confirmation).
+     */
+    public function isHeld(): bool
+    {
+        return $this->status === self::STATUS_HELD;
+    }
+
     public function isExpired(): bool
     {
         // A paid payment is never "expired" even after expires_at passes.
@@ -95,7 +106,7 @@ class Payment extends Model
             return true;
         }
 
-        if ($this->status === self::STATUS_PAID) {
+        if ($this->status === self::STATUS_PAID || $this->status === self::STATUS_HELD) {
             return false;
         }
 

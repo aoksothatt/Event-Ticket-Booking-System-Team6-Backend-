@@ -384,6 +384,25 @@ class BakongService
         if ((int) ($body['responseCode'] ?? 0) !== 0) {
             $message = (string) ($body['responseMessage'] ?? 'The payment gateway could not check the transaction.');
 
+            // "Transaction could not be found" (errorCode 1) is the NORMAL
+            // state while the customer has not paid yet — it is not a gateway
+            // failure. Return a pending result so polling continues instead of
+            // the frontend showing a misleading "gateway unavailable" error
+            // and stopping the poll before the customer has paid.
+            if ($this->isTransactionNotFound($body)) {
+                Log::channel('bakong')->info('Bakong transaction not found yet — payment still pending.', [
+                    'md5' => $md5,
+                ]);
+
+                return [
+                    'status' => 'pending',
+                    'transaction_id' => null,
+                    'amount' => null,
+                    'currency' => null,
+                    'raw' => $body,
+                ];
+            }
+
             Log::channel('bakong')->warning('Bakong returned an application-level error.', [
                 'md5' => $md5,
                 'responseCode' => $body['responseCode'] ?? null,
@@ -391,25 +410,115 @@ class BakongService
                 'message' => $message,
             ]);
 
+            // Backout: Bakong only supports md5 lookups for dynamic KHQRs it
+            // tracks for the configured account. When it reports "Sorry, the
+            // system does not support static QR code" (errorCode 2) the
+            // transaction can never be auto-verified — hammering the gateway
+            // every poll is pointless and the customer must not be told to
+            // simply "try again" (they may have already paid). Signal this
+            // distinct, non-transient case to the verifier instead.
+            if ($this->isStaticQrError($body)) {
+                throw new BakongStaticQrException(
+                    'The payment cannot be verified automatically: Bakong reports this QR type is not supported (static QR). '
+                    . 'If you already paid, your booking is held for manual confirmation — do NOT pay again.',
+                    $body
+                );
+            }
+
             throw new BakongException('Payment gateway is temporarily unavailable: ' . $message, 503);
         }
 
-        $bakongStatus = strtoupper((string) ($body['data']['status'] ?? ($body['status'] ?? '')));
-        $statusMap = config('bakong.status_map', []);
-        $status = $statusMap[$bakongStatus] ?? 'pending';
-
         $data = is_array($body['data'] ?? null) ? $body['data'] : [];
+
+        // Map Bakong's status when it provides one (check_transaction_by_id
+        // and some gateway versions include data.status). The MD5 lookup,
+        // however, omits data.status entirely: once the transaction completes
+        // it simply returns the transaction object (hash, accounts, amount,
+        // acknowledgedDateMs). Treat such a populated transaction as paid —
+        // otherwise every successfully paid order stays "pending" forever.
+        $bakongStatus = strtoupper((string) ($data['status'] ?? $body['status'] ?? ''));
+        $statusMap = config('bakong.status_map', []);
+
+        if ($bakongStatus !== '' && isset($statusMap[$bakongStatus])) {
+            $status = $statusMap[$bakongStatus];
+        } elseif ($this->isCompletedTransaction($data)) {
+            $status = 'paid';
+        } else {
+            $status = 'pending';
+        }
 
         return [
             'status' => $status,
             'transaction_id' => $data['bakong_transaction_id']
                 ?? $data['transaction_id']
+                ?? $data['hash']
+                ?? $data['externalRef']
                 ?? $body['bakong_transaction_id']
                 ?? null,
             'amount' => $data['amount'] ?? null,
             'currency' => $data['currency'] ?? null,
             'raw' => $body,
         ];
+    }
+
+    /**
+     * True when a Bakong application-level error is the "static QR code not
+     * supported" case (Bakong error code 2) rather than a transient network
+     * or rate-limit failure. Matches on the documented errorCode and the
+     * responseMessage text defensively.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    private function isStaticQrError(array $body): bool
+    {
+        if ((int) ($body['errorCode'] ?? $body['error_code'] ?? 0) === 2) {
+            return true;
+        }
+
+        $message = strtolower((string) ($body['responseMessage'] ?? ''));
+        if ($message !== '' && str_contains($message, 'static')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * True when Bakong reports that no transaction exists for the MD5 yet
+     * (errorCode 1 / "Transaction could not be found"). This is the normal
+     * "waiting for the customer to pay" state, not a gateway failure.
+     *
+     * @param  array<string, mixed>  $body
+     */
+    private function isTransactionNotFound(array $body): bool
+    {
+        if ((int) ($body['errorCode'] ?? $body['error_code'] ?? 0) === 1) {
+            return true;
+        }
+
+        $message = strtolower((string) ($body['responseMessage'] ?? ''));
+
+        return $message !== '' && str_contains($message, 'could not be found');
+    }
+
+    /**
+     * True when the response carries an actual completed Bakong transaction.
+     *
+     * check_transaction_by_md5 does NOT return a data.status field; a
+     * non-empty transaction object (hash / accounts / acknowledged timestamp
+     * / amount) is the definitive signal that the payment completed.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function isCompletedTransaction(array $data): bool
+    {
+        foreach (['hash', 'externalRef', 'fromAccountId', 'acknowledgedDateMs', 'amount'] as $key) {
+            if (array_key_exists($key, $data) && $data[$key] !== null && $data[$key] !== '') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

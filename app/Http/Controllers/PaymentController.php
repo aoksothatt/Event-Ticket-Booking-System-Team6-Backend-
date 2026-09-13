@@ -160,6 +160,58 @@ class PaymentController extends Controller
     }
 
     /**
+     * POST /api/payments/{payment}/confirm
+     * Admin-only manual confirmation. Used when Bakong cannot auto-verify a
+     * payment (the "static QR not supported" case) but the merchant confirms
+     * the funds arrived in their Bakong account. Confirms the booking and
+     * issues the tickets through the same idempotent pipeline.
+     */
+    public function confirm(Request $request, int $payment): JsonResponse
+    {
+        if (! $request->user()->hasPermission('manage_payments')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You are not authorized to confirm payments.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'transaction_reference' => 'nullable|string|max:190',
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        $record = $this->payments->findOrFail($payment);
+
+        try {
+            $result = $this->verifier->confirmManually(
+                $record,
+                $validated['transaction_reference'] ?? null,
+                $validated['note'] ?? null,
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        $booking = $result['booking'];
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'payment' => new PaymentResource($result['payment']->fresh('booking')),
+                'status' => $result['status'],
+                'booking_status' => $booking?->status,
+                'tickets_generated' => $result['changed'],
+                'tickets' => $booking
+                    ? $booking->tickets()->with('ticketType')->get()
+                    : [],
+            ],
+        ]);
+    }
+
+    /**
      * POST /api/payments/webhook
      * Bakong webhook callback. Public — authenticated by a shared secret,
      * then runs the same idempotent verification/confirmation pipeline.

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Venue;
 use App\Services\Bakong\BakongException;
 use App\Services\Bakong\BakongService;
+use App\Services\Bakong\BakongStaticQrException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Tymon\JWTAuth\Facades\JWTAuth;
@@ -611,6 +612,55 @@ class PaymentFlowTest extends TestCase
         $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'Retry of a paid booking must never issue duplicate tickets.');
     }
 
+    public function test_checkout_retry_returns_held_payment_without_minting_a_new_qr(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-HELD-005',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $held = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-HELD-005',
+            'transaction_id' => 'PAY-HELD-005',
+            'bakong_md5' => 'md5-held-5',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'held',
+            'payment_status' => 'held',
+        ]);
+
+        // A held booking must NOT receive a new QR charging the customer a
+        // second time — the existing held payment is returned with an empty QR.
+        $this->mock(BakongService::class)->shouldReceive('generateKhqr')->never();
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/checkout', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.payment.id', $held->id)
+            ->assertJsonPath('data.payment.status', 'held')
+            ->assertJsonPath('data.qr_payload', '');
+
+        $this->assertSame(1, Payment::where('booking_id', $booking->id)->count(), 'No new payment (and no double-charge) may be created for a held booking.');
+    }
+
     public function test_checkout_retry_returns_existing_active_payment_until_it_expires(): void
     {
         ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
@@ -958,5 +1008,214 @@ class PaymentFlowTest extends TestCase
         $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'expired', 'payment_status' => 'expired']);
         $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
         $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued for an expired transaction.');
+    }
+
+    /**
+     * When Bakong reports the "static QR code not supported" error (error
+     * code 2), the payment must be placed in manual review (held) instead of
+     * being surfaced as a transient "gateway temporarily unavailable". The
+     * customer may already have paid — no tickets may be issued yet and the
+     * booking stays pending.
+     */
+    public function test_verify_marks_held_when_bakong_says_static_qr_unsupported(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-HELD-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'subtotal' => 25.50,
+            'discount' => 0,
+            'service_fee' => 0,
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-HELD-001',
+            'transaction_id' => 'PAY-HELD-001',
+            'bakong_md5' => 'md5-held-1',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'pending',
+            'payment_status' => 'pending',
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('checkTransactionByMd5')
+            ->once()
+            ->with('md5-held-1')
+            ->andThrow(new BakongStaticQrException(
+                'The payment cannot be verified automatically: Bakong reports this QR type is not supported (static QR). '
+                . 'If you already paid, your booking is held for manual confirmation — do NOT pay again.',
+                ['responseCode' => 2, 'errorCode' => 2, 'responseMessage' => 'Sorry, the system does not support static QR code']
+            ));
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/verify');
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'held');
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $payment->id,
+            'status' => 'held',
+            'payment_status' => 'held',
+        ]);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued for a held payment.');
+    }
+
+    /**
+     * A payment already in manual review must never be re-checked against the
+     * gateway — Bakong will keep reporting the same static-QR error forever
+     * and hammering it wastes the daily quota. It can still resolve to "paid"
+     * once an admin confirms it (isPaid() short-circuit happens first).
+     */
+    public function test_verify_on_held_payment_never_rechecks_the_gateway(): void
+    {
+        ['user' => $user, 'event' => $event] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-HELD-002',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 10.00,
+            'status' => 'pending',
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-HELD-002',
+            'transaction_id' => 'PAY-HELD-002',
+            'bakong_md5' => 'md5-held-2',
+            'currency' => 'USD',
+            'amount' => 10.00,
+            'status' => 'held',
+            'payment_status' => 'held',
+        ]);
+
+        $this->mock(BakongService::class)->shouldReceive('checkTransactionByMd5')->never();
+
+        $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/verify')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'held');
+
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'held']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count());
+    }
+
+    /**
+     * An admin with manage_payments may manually confirm a held (or pending)
+     * payment after verifying the funds in the merchant's Bakong account.
+     * This runs the same idempotent confirmation pipeline: payment paid,
+     * booking confirmed, tickets issued exactly once.
+     */
+    public function test_admin_can_manually_confirm_held_payment_and_issues_tickets(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-HELD-003',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'subtotal' => 25.50,
+            'discount' => 0,
+            'service_fee' => 0,
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-HELD-003',
+            'transaction_id' => 'PAY-HELD-003',
+            'bakong_md5' => 'md5-held-3',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'held',
+            'payment_status' => 'held',
+        ]);
+
+        $response = $this->withHeaders($this->authHeaders($admin))
+            ->postJson('/api/payments/'.$payment->id.'/confirm', [
+                'transaction_reference' => 'MANUAL-REF-003',
+                'note' => 'Funds verified in merchant Bakong account.',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'paid');
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $payment->id,
+            'status' => 'paid',
+            'payment_status' => 'paid',
+            'bakong_transaction_id' => 'MANUAL-REF-003',
+        ]);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'confirmed']);
+        $this->assertSame(1, Ticket::where('booking_id', $booking->id)->count(), 'One ticket must be issued per confirmed ticket item.');
+    }
+
+    /**
+     * A customer must never be able to confirm their own payment — that power
+     * is reserved for admins with manage_payments.
+     */
+    public function test_customer_cannot_manually_confirm_a_payment(): void
+    {
+        ['user' => $user, 'event' => $event] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-HELD-004',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 10.00,
+            'status' => 'pending',
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-HELD-004',
+            'transaction_id' => 'PAY-HELD-004',
+            'bakong_md5' => 'md5-held-4',
+            'currency' => 'USD',
+            'amount' => 10.00,
+            'status' => 'held',
+            'payment_status' => 'held',
+        ]);
+
+        $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/confirm', ['note' => 'me'])
+            ->assertStatus(403);
+
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'held']);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'A customer may never issue tickets for their own payment.');
     }
 }

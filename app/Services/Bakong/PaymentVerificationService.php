@@ -47,6 +47,15 @@ class PaymentVerificationService
             return ['status' => $payment->status, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
         }
 
+        // A payment already placed in manual review is never re-checked
+        // against the gateway: Bakong will keep reporting "static QR not
+        // supported" forever, and hammering it wastes the daily quota. It can
+        // still resolve to "paid" once an admin confirms it (handled by the
+        // isPaid() short-circuit above).
+        if ($payment->isHeld()) {
+            return ['status' => $payment->status, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
+        }
+
         if ($payment->bakong_md5 === null) {
             Log::channel('bakong')->warning('Cannot verify payment without a bakong_md5.', ['payment_id' => $payment->id]);
             throw new BakongException('This payment has no gateway reference to verify.', 422);
@@ -54,6 +63,21 @@ class PaymentVerificationService
 
         try {
             $result = $this->bakongService->checkTransactionByMd5($payment->bakong_md5);
+        } catch (BakongStaticQrException $e) {
+            // Bakong refuses to auto-verify this QR (static type). The
+            // customer may already have paid. Persist the gateway's response
+            // as an audit trail, place the payment in manual review, and stop
+            // polling — the customer must NOT be told to try again / pay again.
+            Log::channel('bakong')->warning('Payment placed in manual review (static QR not supported by Bakong).', [
+                'payment_id' => $payment->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            $this->payments->storeRawResponse($payment, array_merge(['held_for_review' => true], $e->body));
+            $this->payments->markHeld($payment, $e->getMessage());
+            $payment->refresh();
+
+            return ['status' => Payment::STATUS_HELD, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
         } catch (BakongException $e) {
             Log::channel('bakong')->warning('Verification failed for payment.', [
                 'payment_id' => $payment->id,
@@ -108,6 +132,54 @@ class PaymentVerificationService
         });
 
         return ['status' => $confirmed['payment']->status, 'changed' => true, 'payment' => $confirmed['payment'], 'booking' => $confirmed['booking']];
+    }
+
+    /**
+     * Manually confirm a payment after the merchant verifies the funds were
+     * received in their Bakong account. Used for payments that Bakong cannot
+     * auto-verify (the "static QR not supported" case).
+     *
+     * Reuses the exact same idempotent confirmation path as a successful
+     * gateway verification (payment paid, booking confirmed, tickets issued
+     * exactly once, ticket email dispatched).
+     *
+     * @return array{status: string, changed: bool, payment: Payment, booking: ?Booking}
+     *
+     * @throws \InvalidArgumentException when the payment is not in a
+     *         confirmable (pending/held) state.
+     */
+    public function confirmManually(Payment $payment, ?string $transactionReference = null, ?string $note = null): array
+    {
+        $payment = Payment::with('booking')->find($payment->id) ?? $payment;
+
+        if ($payment->isPaid()) {
+            return ['status' => $payment->status, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
+        }
+
+        if (! in_array($payment->status, [Payment::STATUS_PENDING, Payment::STATUS_HELD], true)) {
+            throw new \InvalidArgumentException('Only pending or held payments can be confirmed manually.');
+        }
+
+        $confirmed = DB::transaction(function () use ($payment, $transactionReference) {
+            return $this->confirmPaid($payment, [
+                'transaction_id' => $transactionReference,
+            ]);
+        });
+
+        Log::channel('bakong')->warning('Payment confirmed manually by an administrator.', [
+            'payment_id' => $payment->id,
+            'booking_id' => $payment->booking_id,
+            'confirmed_by' => auth()->id(),
+            'transaction_reference' => $transactionReference,
+            'note' => $note,
+        ]);
+
+        return [
+            'status' => $confirmed['payment']->status,
+            'changed' => true,
+            'payment' => $confirmed['payment'],
+            'booking' => $confirmed['booking'],
+        ];
     }
 
     /**

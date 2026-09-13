@@ -185,6 +185,63 @@ class BakongServiceTest extends TestCase
         $this->assertSame('pending', $service->checkTransactionByMd5('abc')['status']);
     }
 
+    /**
+     * Real Bakong /v1/check_transaction_by_md5 responses do NOT include a
+     * data.status field — a completed transaction is just the transaction
+     * object. It must still map to "paid" (regression: every paid order used
+     * to stay "pending" because of the missing status field).
+     */
+    public function test_check_transaction_by_md5_maps_transaction_without_status_to_paid(): void
+    {
+        $service = $this->serviceWithFake([
+            '*/check_transaction_by_md5' => Http::response([
+                'responseCode' => 0,
+                'responseMessage' => 'Success',
+                'errorCode' => null,
+                'data' => [
+                    'hash' => 'd750edab5daedcd823cd203adce9c86260cca3abe94ed150b6da3dbec6e701da',
+                    'fromAccountId' => 'abaakhppxxx@abaa',
+                    'toAccountId' => 'merchant@bkrt',
+                    'currency' => 'USD',
+                    'amount' => 0.01,
+                    'createdDateMs' => 1789281678000,
+                    'acknowledgedDateMs' => 1789281681000,
+                    'externalRef' => '100FT38982317064',
+                ],
+            ], 200),
+        ]);
+
+        $result = $service->checkTransactionByMd5('abc123');
+
+        $this->assertSame('paid', $result['status']);
+        $this->assertSame('d750edab5daedcd823cd203adce9c86260cca3abe94ed150b6da3dbec6e701da', $result['transaction_id']);
+        $this->assertSame(0.01, $result['amount']);
+        $this->assertSame('USD', $result['currency']);
+    }
+
+    /**
+     * "Transaction could not be found" (errorCode 1) is the normal state while
+     * the customer has not paid yet. It must resolve to "pending" instead of
+     * throwing, so the frontend keeps polling rather than showing a gateway
+     * error and stopping.
+     */
+    public function test_check_transaction_by_md5_treats_not_found_as_pending(): void
+    {
+        $service = $this->serviceWithFake([
+            '*/check_transaction_by_md5' => Http::response([
+                'responseCode' => 1,
+                'responseMessage' => 'Transaction could not be found. Please check and try again.',
+                'errorCode' => 1,
+                'data' => null,
+            ], 200),
+        ]);
+
+        $result = $service->checkTransactionByMd5('abc123');
+
+        $this->assertSame('pending', $result['status']);
+        $this->assertNull($result['transaction_id']);
+    }
+
     public function test_check_transaction_by_md5_throws_on_http_error(): void
     {
         $this->expectException(BakongException::class);
