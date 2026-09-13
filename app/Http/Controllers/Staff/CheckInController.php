@@ -52,8 +52,9 @@ class CheckInController extends Controller
      *
      * Status flow: DONE → ACTIVE → USED (auto-activates DONE tickets).
      *
-     * If the ticket is already used, returns 409 with the existing check-in
-     * record so the frontend can display the "already checked in" warning.
+     * If the ticket is already used, returns a successful, non-mutating
+     * response with the existing check-in record. A duplicate camera frame
+     * is an expected scanner outcome, not a failed check-in request.
      *
      * Uses DB transaction + row lock (SELECT FOR UPDATE) to prevent
      * duplicate check-ins from concurrent scans of the same QR code.
@@ -113,11 +114,13 @@ class CheckInController extends Controller
                     ->first();
 
                 $payload['already_checked_in'] = true;
+                $payload['success'] = true;
+                $payload['message'] = 'This ticket has already been checked in.';
                 $payload['data'] = new TicketResource($ticket->fresh(['user', 'event', 'ticketType', 'booking']));
                 $payload['check_in'] = $existing ? new CheckInResource($existing) : null;
             }
 
-            return response()->json($payload, 409);
+            return response()->json($payload, $e->status() === 'used' ? 200 : 409);
         }
     }
 

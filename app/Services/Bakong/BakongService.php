@@ -383,6 +383,31 @@ class BakongService
         // resolves. Surface it as a transient gateway error instead.
         if ((int) ($body['responseCode'] ?? 0) !== 0) {
             $message = (string) ($body['responseMessage'] ?? 'The payment gateway could not check the transaction.');
+            $errorCode = (int) ($body['errorCode'] ?? 0);
+
+            // Bakong returns responseCode 1 / errorCode 1 with "Transaction
+            // could not be found" whenever the customer has NOT paid yet.
+            // This is the expected INVALID state while the QR is still open —
+            // it must stay pending so polling continues and the payment can
+            // be confirmed the moment the customer scans and pays. Treating
+            // it as a gateway outage stops the frontend from ever recognising
+            // the payment.
+            if ($errorCode === 1 || stripos($message, 'could not be found') !== false || stripos($message, 'transaction not found') !== false) {
+                Log::channel('bakong')->debug('Bakong has not seen the transaction yet (INVALID) — staying pending.', [
+                    'md5' => $md5,
+                    'responseCode' => $body['responseCode'] ?? null,
+                    'errorCode' => $errorCode,
+                    'message' => $message,
+                ]);
+
+                return [
+                    'status' => 'pending',
+                    'transaction_id' => null,
+                    'amount' => null,
+                    'currency' => null,
+                    'raw' => $body,
+                ];
+            }
 
             // "Transaction could not be found" (errorCode 1) is the NORMAL
             // state while the customer has not paid yet — it is not a gateway
@@ -406,7 +431,7 @@ class BakongService
             Log::channel('bakong')->warning('Bakong returned an application-level error.', [
                 'md5' => $md5,
                 'responseCode' => $body['responseCode'] ?? null,
-                'errorCode' => $body['errorCode'] ?? null,
+                'errorCode' => $errorCode,
                 'message' => $message,
             ]);
 

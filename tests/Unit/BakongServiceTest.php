@@ -185,7 +185,7 @@ class BakongServiceTest extends TestCase
         $this->assertSame('pending', $service->checkTransactionByMd5('abc')['status']);
     }
 
-    /**
+/**
      * Real Bakong /v1/check_transaction_by_md5 responses do NOT include a
      * data.status field — a completed transaction is just the transaction
      * object. It must still map to "paid" (regression: every paid order used
@@ -240,6 +240,24 @@ class BakongServiceTest extends TestCase
 
         $this->assertSame('pending', $result['status']);
         $this->assertNull($result['transaction_id']);
+    }
+
+    public function test_check_transaction_by_md5_throws_on_daily_request_limit(): void
+    {
+        // Application-level failure that is NOT "transaction not found" (e.g.
+        // the daily request limit) must stay a surfacable gateway error.
+        $this->expectException(BakongException::class);
+
+        $service = $this->serviceWithFake([
+            '*/check_transaction_by_md5' => Http::response([
+                'responseCode' => 1,
+                'errorCode' => 17,
+                'responseMessage' => 'Daily request limit of 100 exceeded',
+                'data' => null,
+            ], 200),
+        ]);
+
+        $service->checkTransactionByMd5('abc');
     }
 
     public function test_check_transaction_by_md5_throws_on_http_error(): void
