@@ -186,7 +186,10 @@ class CheckoutController extends Controller
                 'expires_at' => $payment->expires_at?->toIso8601String(),
                 'amount' => $payment->amount,
                 'currency' => $payment->currency,
-                'poll_interval_seconds' => 30,
+                // The browser uses this to ask the backend to verify a paid
+                // KHQR. Keep the wait short enough that a completed payment
+                // closes the QR and opens the issued tickets promptly.
+                'poll_interval_seconds' => 15,
             ],
         ], 201);
     }

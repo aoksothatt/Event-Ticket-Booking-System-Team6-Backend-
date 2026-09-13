@@ -129,7 +129,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/checkout', [CheckoutController::class, 'store'])->middleware('throttle:checkout');
     Route::get('/payments/{payment}', [PaymentController::class, 'show']);
     Route::get('/payments/{payment}/status', [PaymentController::class, 'status']);
-    Route::post('/payments/{payment}/verify', [PaymentController::class, 'verify'])->middleware('throttle:checkout');
+    Route::post('/payments/{payment}/verify', [PaymentController::class, 'verify'])->middleware('throttle:verify');
 
     Route::get('/tickets/mine', [ApiTicketController::class, 'index']);
 });

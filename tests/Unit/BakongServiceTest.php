@@ -185,6 +185,45 @@ class BakongServiceTest extends TestCase
         $this->assertSame('pending', $service->checkTransactionByMd5('abc')['status']);
     }
 
+    public function test_check_transaction_by_md5_stays_pending_when_bakong_cannot_find_transaction(): void
+    {
+        // Bakong returns this response while the customer has NOT paid yet
+        // (the expected INVALID state). It must stay pending so the frontend
+        // keeps polling — not throw, which stops the payment from ever being
+        // confirmed after the customer pays.
+        $service = $this->serviceWithFake([
+            '*/check_transaction_by_md5' => Http::response([
+                'responseCode' => 1,
+                'errorCode' => 1,
+                'responseMessage' => 'Transaction could not be found. Please check and try again.',
+                'data' => null,
+            ], 200),
+        ]);
+
+        $result = $service->checkTransactionByMd5('abc');
+
+        $this->assertSame('pending', $result['status']);
+        $this->assertNull($result['transaction_id']);
+    }
+
+    public function test_check_transaction_by_md5_throws_on_daily_request_limit(): void
+    {
+        // Application-level failure that is NOT "transaction not found" (e.g.
+        // the daily request limit) must stay a surfacable gateway error.
+        $this->expectException(BakongException::class);
+
+        $service = $this->serviceWithFake([
+            '*/check_transaction_by_md5' => Http::response([
+                'responseCode' => 1,
+                'errorCode' => 17,
+                'responseMessage' => 'Daily request limit of 100 exceeded',
+                'data' => null,
+            ], 200),
+        ]);
+
+        $service->checkTransactionByMd5('abc');
+    }
+
     public function test_check_transaction_by_md5_throws_on_http_error(): void
     {
         $this->expectException(BakongException::class);

@@ -198,6 +198,14 @@ class PaymentFlowTest extends TestCase
             'status' => 'confirmed',
         ]);
         $this->assertSame(1, Ticket::where('booking_id', $booking->id)->count());
+
+        // The post-payment destination must immediately expose the issued
+        // ticket together with the confirmed booking/payment details.
+        $this->withHeaders($this->authHeaders($user))
+            ->getJson('/api/my-tickets')
+            ->assertOk()
+            ->assertJsonPath('data.0.booking.id', $booking->id)
+            ->assertJsonPath('data.0.booking.payments.0.status', 'paid');
     }
 
     public function test_verify_is_idempotent_when_called_twice(): void

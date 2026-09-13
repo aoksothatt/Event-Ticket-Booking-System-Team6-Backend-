@@ -63,7 +63,10 @@ class TicketController extends Controller
     {
         $tickets = Ticket::with([
             'ticketType.event.venue',
-            'booking',
+            // A customer reaches this endpoint immediately after Bakong
+            // confirms payment. Include the booking and its payment record
+            // so My Tickets can show that the order is settled.
+            'booking.payments',
             'logs',
         ])
             ->where('user_id', $request->user()->id)
