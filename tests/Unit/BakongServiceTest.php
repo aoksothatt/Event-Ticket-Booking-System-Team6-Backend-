@@ -7,6 +7,7 @@ use App\Services\Bakong\BakongException;
 use App\Services\Bakong\BakongService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use KHQR\BakongKHQR;
 use Tests\TestCase;
 
 class BakongServiceTest extends TestCase
@@ -53,15 +54,59 @@ class BakongServiceTest extends TestCase
         $this->assertNotEmpty($result['expires_at']);
     }
 
-    public function test_generate_khqr_throws_when_merchant_name_missing(): void
+    public function test_generate_khqr_includes_creation_and_expiration_timestamps(): void
     {
-        config(['bakong.merchant_name' => '']);
+        Http::fake();
+
+        $service = $this->serviceWithFake([]);
+        $result = $service->generateKhqr(25.50, 'TXN-EXP-001');
+
+        $this->assertTrue(
+            BakongKHQR::verify($result['khqr'])->isValid,
+            'Rebuilt KHQR must pass the SDK CRC verifier.'
+        );
+
+        $segments = $this->parseTlvForTest($result['khqr']);
+        $this->assertArrayHasKey('99', $segments, 'Tag 99 must exist.');
+
+        $inner = $this->parseTlvForTest($segments['99']['value']);
+        $creation = $inner['00']['value'] ?? null;
+        $expiry = $inner['01']['value'] ?? null;
+
+        $this->assertNotNull($creation, 'Tag 99 must embed the creation timestamp.');
+        $this->assertNotNull($expiry, 'Tag 99 must embed the expiration timestamp.');
+        $this->assertSame(13, strlen($creation));
+        $this->assertSame(13, strlen($expiry));
+
+        $this->assertGreaterThan((int) $creation, (int) $expiry, 'Expiry must be after creation.');
+        $this->assertGreaterThan(now()->getTimestampMs(), (int) $expiry, 'Expiry must be in the future.');
+    }
+
+    public function test_generate_khqr_throws_when_account_id_missing(): void
+    {
+        config(['bakong.account_id' => '']);
+        config(['bakong.merchant_id' => '']);
 
         $this->expectException(BakongException::class);
-        $this->expectExceptionMessage('BAKONG_MERCHANT_NAME');
+        $this->expectExceptionMessage('BAKONG_ACCOUNT');
 
         $service = $this->serviceWithFake([]);
         $service->generateKhqr(10.00);
+    }
+
+    public function test_generate_khqr_falls_back_to_merchant_id_and_app_name(): void
+    {
+        config(['bakong.account_id' => '']);
+        config(['bakong.merchant_id' => 'merchant@bkrt']);
+        config(['bakong.merchant_name' => '']);
+
+        Http::fake();
+
+        $service = $this->serviceWithFake([]);
+        $result = $service->generateKhqr(10.00, 'TXN-FALLBACK-001');
+
+        $this->assertStringStartsWith('000201', $result['khqr']);
+        $this->assertSame(md5($result['khqr']), $result['md5']);
     }
 
     public function test_generate_deeplink_returns_short_link(): void
@@ -169,5 +214,23 @@ class BakongServiceTest extends TestCase
         $service = new BakongService($api);
 
         $this->assertSame('paid', $service->checkTransactionByMd5('abc')['status']);
+    }
+
+    /**
+     * @return array<string, array{len: int, value: string}>
+     */
+    private function parseTlvForTest(string $payload): array
+    {
+        $segments = [];
+        $rest = $payload;
+
+        while ($rest !== '') {
+            $tag = substr($rest, 0, 2);
+            $len = (int) substr($rest, 2, 2);
+            $segments[$tag] = ['len' => $len, 'value' => substr($rest, 4, $len)];
+            $rest = substr($rest, 4 + $len);
+        }
+
+        return $segments;
     }
 }

@@ -34,6 +34,7 @@ class Ticket extends Model
         'qr_token',
         'qr_code',
         'status',
+        'issued_at',
         'used_at',
         'expired_at',
     ];

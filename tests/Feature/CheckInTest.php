@@ -92,7 +92,13 @@ class CheckInTest extends TestCase
             ->assertJsonPath('status', 'not_found');
     }
 
-    public function test_used_ticket_is_rejected(): void
+    /**
+     * A ticket that is already USED must not be checked in a second time.
+     * The endpoint reports it as already_checked_in (200) — matching the
+     * contract the frontend scanner relies on — and must not create a new
+     * TicketCheckin row.
+     */
+    public function test_used_ticket_is_reported_without_new_checkin(): void
     {
         $organizerUser = User::factory()->create(['role' => 'organizer']);
         $organizer = Organizer::factory()->create(['user_id' => $organizerUser->id]);
@@ -102,10 +108,18 @@ class CheckInTest extends TestCase
         $response = $this->withToken($this->organizerToken($organizerUser))
             ->postJson('/api/staff/check-in', ['ticket_code' => $ticket->qr_token]);
 
-        $response->assertStatus(409)
-            ->assertJsonPath('message', 'Ticket already used.');
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('already_checked_in', true);
+
+        $this->assertSame(0, TicketCheckin::where('ticket_id', $ticket->id)->count());
     }
 
+    /**
+     * Scanning the same QR twice must never produce two check-ins: the first
+     * scan succeeds, the second is reported as already_checked_in and no
+     * additional TicketCheckin row is created.
+     */
     public function test_duplicate_scan_never_succeeds_twice(): void
     {
         $organizerUser = User::factory()->create(['role' => 'organizer']);
@@ -120,8 +134,9 @@ class CheckInTest extends TestCase
         $second = $this->withToken($this->organizerToken($organizerUser))
             ->postJson('/api/staff/check-in', ['ticket_code' => $ticket->qr_token]);
 
-        $second->assertStatus(409)
-            ->assertJsonPath('message', 'Ticket already used.');
+        $second->assertOk()
+            ->assertJsonPath('already_checked_in', true)
+            ->assertJsonPath('message', 'This ticket has already been checked in.');
 
         $this->assertSame(1, TicketCheckin::where('ticket_id', $ticket->id)->count());
     }

@@ -24,8 +24,8 @@ class DashboardController extends Controller
         $totalEvents = Event::count();
         $totalCategories = Category::count();
         $totalVenues = Venue::count();
+        $totalRevenue = Payments::where(fn ($q) => $q->where('payment_status', 'paid')->orWhere('status', 'paid'))->sum('amount');
         $totalBookings = Booking::count();
-        $totalRevenue = Payments::where('payment_status', 'paid')->sum('amount');
         $pendingBookings = Booking::where('status', 'pending')->count();
         $activeEvents = Event::where('status', 'published')->count();
         $activeUsers = User::where('status', 'active')->count();
@@ -61,7 +61,7 @@ class DashboardController extends Controller
         $user = $request->user();
 
         $totalBookings = Booking::where('user_id', $user->id)->count();
-        $totalSpent = Payments::where('payment_status', 'paid')
+        $totalSpent = Payments::where(fn ($q) => $q->where('payment_status', 'paid')->orWhere('status', 'paid'))
             ->whereHas('booking', fn ($q) => $q->where('user_id', $user->id))
             ->sum('amount');
 

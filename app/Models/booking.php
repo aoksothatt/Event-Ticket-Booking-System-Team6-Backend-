@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Booking extends Model
 {
+    use HasFactory;
+
     /** PostgreSQL preserves this capitalized table name because Laravel quotes it. */
     protected $table = 'Booking';
 
@@ -23,6 +26,8 @@ class Booking extends Model
     ];
 
     protected $casts = [
+        'user_id' => 'integer',
+        'event_id' => 'integer',
         'booking_date' => 'datetime',
         'total_amount' => 'decimal:2',
         'discount' => 'decimal:2',

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\VerifyPaymentRequest;
 use App\Http\Resources\PaymentResource;
 use App\Models\Payment;
 use App\Repositories\PaymentRepository;
@@ -11,7 +10,6 @@ use App\Services\Bakong\PaymentVerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -36,8 +34,10 @@ class PaymentController extends Controller
     {
         $record = $this->payments->findOrFail($payment);
 
-        if ($record->booking->user_id !== $request->user()->id
-            && ! $request->user()->hasPermission('manage_payments')) {
+        if (
+            (int) $record->booking->user_id !== (int) $request->user()->id
+            && ! $request->user()->hasPermission('manage_payments')
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'You are not authorized to view this payment.',
@@ -46,6 +46,15 @@ class PaymentController extends Controller
 
         return response()->json([
             'success' => true,
+            'payment' => [
+                'id' => $record->id,
+                'status' => $record->status,
+                'amount' => (float) $record->amount,
+                'currency' => $record->currency,
+                'paid_at' => $record->paid_at?->toIso8601String(),
+                'booking_number' => $record->booking?->booking_number,
+                'is_expired' => $record->isExpired(),
+            ],
             'data' => [
                 'payment' => new PaymentResource($record),
                 'status' => $record->status,
@@ -62,16 +71,37 @@ class PaymentController extends Controller
     {
         $record = $this->payments->findOrFail($payment);
 
-        if ($record->booking->user_id !== $request->user()->id
-            && ! $request->user()->hasPermission('manage_payments')) {
+        if (
+            (int) $record->booking->user_id !== (int) $request->user()->id
+            && ! $request->user()->hasPermission('manage_payments')
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'You are not authorized to view this payment.',
             ], 403);
         }
 
+        // If payment is pending and unexpired, check with Bakong automatically
+        if ($record->status === Payment::STATUS_PENDING && ! $record->isExpired() && $record->bakong_md5) {
+            try {
+                $this->verifier->verify($record);
+                $record->refresh();
+            } catch (\Throwable) {
+                // If Bakong is still pending or gateway is momentarily unreachable, keep pending status
+            }
+        }
+
         return response()->json([
             'success' => true,
+            'payment' => [
+                'id' => $record->id,
+                'status' => $record->status,
+                'amount' => (float) $record->amount,
+                'currency' => $record->currency,
+                'paid_at' => $record->paid_at?->toIso8601String(),
+                'booking_number' => $record->booking?->booking_number,
+                'is_expired' => $record->isExpired(),
+            ],
             'data' => [
                 'payment_id' => $record->id,
                 'status' => $record->status,
@@ -79,7 +109,7 @@ class PaymentController extends Controller
                 'paid_at' => $record->paid_at?->toIso8601String(),
                 'expires_at' => $record->expires_at?->toIso8601String(),
                 'booking_id' => $record->booking_id,
-                'booking_status' => $record->booking->status,
+                'booking_status' => $record->booking?->status,
             ],
         ]);
     }
@@ -93,8 +123,10 @@ class PaymentController extends Controller
     {
         $record = $this->payments->findOrFail($payment);
 
-        if ($record->booking->user_id !== $request->user()->id
-            && ! $request->user()->hasPermission('manage_payments')) {
+        if (
+            (int) $record->booking->user_id !== (int) $request->user()->id
+            && ! $request->user()->hasPermission('manage_payments')
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'You are not authorized to verify this payment.',

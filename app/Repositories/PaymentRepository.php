@@ -60,14 +60,31 @@ class PaymentRepository
     public function markExpired(Payment $payment): Payment
     {
         if ($payment->status !== Payment::STATUS_PAID) {
-            $payment->update(['status' => Payment::STATUS_EXPIRED]);
+            $payment->update([
+                'status' => Payment::STATUS_EXPIRED,
+                'payment_status' => 'expired',
+            ]);
+        }
+        return $payment;
+    }
+
+    public function markFailed(Payment $payment): Payment
+    {
+        if ($payment->status !== Payment::STATUS_PAID) {
+            $payment->update([
+                'status' => Payment::STATUS_FAILED,
+                'payment_status' => 'failed',
+            ]);
         }
         return $payment;
     }
 
     public function markCancelled(Payment $payment): Payment
     {
-        $payment->update(['status' => Payment::STATUS_CANCELLED]);
+        $payment->update([
+            'status' => Payment::STATUS_CANCELLED,
+            'payment_status' => 'cancelled',
+        ]);
         return $payment;
     }
 

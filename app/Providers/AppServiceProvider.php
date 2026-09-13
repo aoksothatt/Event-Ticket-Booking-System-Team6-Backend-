@@ -50,5 +50,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('otp', function (Request $request) {
             return Limit::perMinute(3)->by($request->ip());
         });
+
+        // Guards the Bakong transaction-check endpoint so long-running
+        // frontend polling can never hammer the Bakong Open API.
+        RateLimiter::for('verify', function (Request $request) {
+            return Limit::perMinute(30)->by($request->user()?->getAuthIdentifier() ?? $request->ip());
+        });
     }
 }

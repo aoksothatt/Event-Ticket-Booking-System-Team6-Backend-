@@ -32,13 +32,15 @@ class TicketService
 
         $created = DB::transaction(function () use ($booking) {
             $created = collect();
+            $sequence = 0;
 
             foreach ($booking->items as $item) {
                 $itemExisting = $item->tickets()->count();
                 $toCreate = max(0, (int) $item->quantity - $itemExisting);
 
                 for ($i = 0; $i < $toCreate; $i++) {
-                    $created->push($this->createForItem($booking, $item));
+                    $sequence++;
+                    $created->push($this->createForItem($booking, $item, $sequence));
                 }
             }
 
@@ -51,7 +53,7 @@ class TicketService
     /**
      * Create a single ticket record for a booking item inside the transaction.
      */
-    protected function createForItem(Booking $booking, $item): Ticket
+    protected function createForItem(Booking $booking, $item, int $sequence): Ticket
     {
         $ticketType = $item->ticketType;
         $event = $ticketType->event;
@@ -63,8 +65,10 @@ class TicketService
             'user_id' => $booking->user_id,
             'event_id' => $event->id,
             'ticket_code' => $this->uniqueTicketCode(),
+            'ticket_number' => 'TKT-' . $booking->id . '-' . $sequence,
             'qr_token' => $this->uniqueQrToken(),
             'status' => Ticket::ACTIVE,
+            'issued_at' => now(),
             'expired_at' => $this->eventEndTimestamp($event),
             'used_at' => null,
         ]);

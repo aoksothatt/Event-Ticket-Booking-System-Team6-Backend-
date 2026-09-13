@@ -7,6 +7,7 @@ use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingItemController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\CheckInController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\Customer\TicketController as CustomerTicketController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventsController;
@@ -32,6 +33,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 /* ----- Clean /api/auth/* namespace (new architecture) ----- */
+
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
@@ -59,6 +61,7 @@ Route::get('/ticket-types', [TicketTypeController::class, 'index']);
 Route::get('/ticket-types/{id}', [TicketTypeController::class, 'show']);
 Route::get('/reviews', [ReviewsController::class, 'index']);
 Route::get('/reviews/{id}', [ReviewsController::class, 'show']);
+Route::post('/payments/webhook', [PaymentController::class, 'webhook']);
 
 /*
 |--------------------------------------------------------------------------
@@ -66,7 +69,7 @@ Route::get('/reviews/{id}', [ReviewsController::class, 'show']);
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth:api'])->group(function () {
-    Route::get('/user', static fn (Request $request) => response()->json([
+    Route::get('/user', static fn(Request $request) => response()->json([
         'success' => true,
         'data' => $request->user(),
     ]));
@@ -231,4 +234,10 @@ Route::middleware(['auth:api', 'role:customer,organizer,admin'])->group(function
 
     Route::get('/payments', [PaymentsController::class, 'index']);
     Route::post('/payments', [PaymentsController::class, 'store']);
+
+    // Bakong KHQR checkout & payment verification
+    Route::post('/checkout', [CheckoutController::class, 'store']);
+    Route::get('/payments/{id}', [PaymentController::class, 'show']);
+    Route::get('/payments/{id}/status', [PaymentController::class, 'status']);
+    Route::post('/payments/{id}/verify', [PaymentController::class, 'verify'])->middleware('throttle:verify');
 });

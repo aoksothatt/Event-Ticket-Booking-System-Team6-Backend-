@@ -2,98 +2,133 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\Booking;
+use App\Models\Payment;
 use App\Models\Payments;
-use App\Services\TicketService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+
 class PaymentsController extends Controller
 {
-    public function index(){
+    /**
+     * Payments index — scoped by role so a customer can never see another
+     * customer's payment records:
+     *   - customer  → only their own bookings' payments
+     *   - organizer → only payments for their events
+     *   - admin     → everything
+     */
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        $query = Payments::with(['booking.user', 'booking.event', 'booking.tickets'])->latest();
+
+        if ($user->role === Role::CUSTOMER->value) {
+            $query->whereHas('booking', fn($q) => $q->where('user_id', $user->id));
+        } elseif ($user->role === Role::ORGANIZER->value && $user->organizerProfile) {
+            $query->whereHas(
+                'booking.event',
+                fn($q) => $q->where('organizer_id', $user->organizerProfile->id)
+            );
+        }
+
         return response()->json([
             'success' => true,
-            'data' => Payments::with(['booking.user', 'booking.event', 'booking.tickets'])->latest()->get()
+            'data' => $query->get()
         ]);
     }
 
     /**
      * Payments belonging to the authenticated customer (for their dashboard).
      */
-    public function my(Request $request){
+    public function my(Request $request)
+    {
         return response()->json([
             'success' => true,
             'data' => Payments::with(['booking.event'])
-                ->whereHas('booking', fn ($q) => $q->where('user_id', $request->user()->id))
+                ->whereHas('booking', fn($q) => $q->where('user_id', $request->user()->id))
                 ->latest()
                 ->get()
         ]);
     }
-    public function store(Request $request){
+
+    /**
+     * Record a pending payment for a booking.
+     *
+     * SECURITY: this endpoint is intentionally no longer able to mark a
+     * payment as "paid" or confirm a booking — a payment may ONLY be marked
+     * paid after the backend verifies the transaction with Bakong via
+     * PaymentVerificationService (see PaymentController@verify / webhook).
+     *
+     * If the booking already has a settled or live pending payment, that
+     * record is returned unchanged (idempotent) so repeated calls never
+     * create duplicates.
+     */
+    public function store(Request $request)
+    {
         $validated = $request->validate([
-            'booking_id'=>'required|exists:Booking,id',
-            'payment_method'=>'required|string|max:50',
-            'amount' => 'nullable|numeric|min:0',
-            'currency' => 'nullable|string|max:10',
-            'payment_status' => 'nullable|string|max:30',
-            'transaction_id' => 'nullable|string|max:150',
+            'booking_id' => 'required|exists:Booking,id',
+            'payment_method' => 'nullable|string|max:50',
         ]);
 
         $booking = Booking::with('items')->findOrFail($validated['booking_id']);
 
         // A customer may only create a payment for their own booking.
-        if ($request->user('api')->role === 'customer' && $booking->user_id !== $request->user('api')->id) {
+        if ($request->user('api')->role === Role::CUSTOMER->value && (int) $booking->user_id !== (int) $request->user('api')->id) {
             return response()->json([
                 'success' => false,
                 'message' => 'You can only pay for your own bookings.',
             ], 403);
         }
 
-        // Use the authoritative amount from the booking, ignoring any
-        // client-supplied amount unless it is explicitly given.
-        $amount = $validated['amount'] ?? $booking->total_amount;
-        $currency = $validated['currency'] ?? 'USD';
-        $paymentStatus = $validated['payment_status'] ?? 'paid';
+        $payment = Payments::where('booking_id', $booking->id)
+            ->where('status', Payment::STATUS_PAID)
+            ->latest('id')
+            ->first();
 
-        $payment = DB::transaction(function () use ($validated, $booking, $amount, $currency, $paymentStatus, $request) {
-            // Guard against duplicate payments being recorded for the same booking
-            // + transaction (idempotency when a gateway confirmation fires twice).
-            $existing = Payments::where('booking_id', $booking->id)
-                ->where('transaction_id', $validated['transaction_id'] ?? '')
-                ->first();
-
-            $transactionId = $validated['transaction_id']
-                ?? ($existing ? $existing->transaction_id : 'TXN-' . strtoupper(Str::random(12)));
-
-            if ($existing) {
-                return $existing;
-            }
-
-            $payment = Payments::create([
-                'booking_id'      => $booking->id,
-                'payment_method'  => $validated['payment_method'],
-                'transaction_id'  => $transactionId,
-                'amount'          => $amount,
-                'currency'        => $currency,
-                'payment_status'  => $paymentStatus,
-                'paid_at'         => $paymentStatus === 'paid' ? now() : null,
+        if ($payment) {
+            Log::channel('bakong')->warning('PaymentsController: booked a payment for an already-settled booking.', [
+                'booking_id' => $booking->id,
+                'payment_id' => $payment->id,
             ]);
 
-            // Only confirm the booking + generate tickets once payment succeeds.
-            if ($paymentStatus === 'paid' && $booking->status !== 'confirmed') {
-                $booking->update(['status' => 'confirmed']);
+            return response()->json([
+                'success' => true,
+                'message' => 'This booking is already paid.',
+                'data' => $payment->load('booking', 'booking.tickets'),
+            ]);
+        }
 
-                app(TicketService::class)->generateForBooking($booking);
-            }
+        // Reuse a still-active pending payment instead of stacking duplicates.
+        $payment = Payments::where('booking_id', $booking->id)
+            ->where('status', Payment::STATUS_PENDING)
+            ->latest('id')
+            ->first();
 
-            return $payment;
-        });
+        if (! $payment) {
+            $payment = Payments::create([
+                'booking_id'           => $booking->id,
+                'provider'             => Payment::PROVIDER_BAKONG,
+                'payment_method'       => $validated['payment_method'] ?? 'bakong_khqr',
+                'transaction_reference' => 'PAY-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6)),
+                'transaction_id'       => 'PAY-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6)),
+                'amount'               => $booking->total_amount,
+                'currency'             => config('bakong.currency', 'USD'),
+                'status'               => Payment::STATUS_PENDING,
+                'payment_status'       => 'pending',
+            ]);
+        }
+
+        Log::channel('bakong')->info('Legacy payment record created (pending).', [
+            'booking_id' => $booking->id,
+            'payment_id' => $payment->id,
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Payment created successfully',
+            'message' => 'Payment recorded as pending. Scan the KHQR to pay.',
             'data' => $payment->load('booking', 'booking.tickets')
         ], 201);
     }
-
 }

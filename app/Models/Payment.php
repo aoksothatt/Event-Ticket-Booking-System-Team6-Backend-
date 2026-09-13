@@ -90,8 +90,13 @@ class Payment extends Model
 
     public function isExpired(): bool
     {
+        // A paid payment is never "expired" even after expires_at passes.
         if ($this->status === self::STATUS_EXPIRED) {
             return true;
+        }
+
+        if ($this->status === self::STATUS_PAID) {
+            return false;
         }
 
         return $this->expires_at !== null && $this->expires_at->isPast();

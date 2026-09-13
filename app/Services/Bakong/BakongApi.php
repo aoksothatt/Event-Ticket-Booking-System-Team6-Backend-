@@ -18,10 +18,26 @@ use Illuminate\Support\Facades\Log;
  * generate a QR code — that endpoint does not exist. It is only used for
  * the endpoints Bakong actually exposes: tokens, deeplinks, and
  * transaction lookups.
+ *
+ * Endpoint paths mirror the Bakong Open API spec / vendor KHQR SDK
+ * constants:
+ *   - POST /requestToken                                  (token issuance)
+ *   - POST /v1/generate_deeplink_by_qr                    (wallet deeplink)
+ *   - POST /v1/check_transaction_by_md5                   (transaction check)
+ * The configured base URL may or may not include the "/v1" segment; the
+ * constructor normalises it away so the paths above are always resolved
+ * against the API root.
  */
 class BakongApi
 {
-    public function __construct(private readonly string $baseUrl, private readonly int $timeout) {}
+    private readonly string $baseUrl;
+
+    public function __construct(string $baseUrl, private readonly int $timeout)
+    {
+        // Normalise so a trailing "/v1" (as in the config default) does not
+        // duplicate the version segment that is part of the endpoint paths.
+        $this->baseUrl = rtrim((string) preg_replace('#/v1$#', '', $baseUrl), '/');
+    }
 
     /**
      * Request an OAuth access token from Bakong.
@@ -54,7 +70,7 @@ class BakongApi
             $payload['sourceInfo'] = $sourceInfo;
         }
 
-        return $this->send('post', '/generate_deeplink_by_qr', $payload, $token);
+        return $this->send('post', '/v1/generate_deeplink_by_qr', $payload, $token);
     }
 
     /**
@@ -62,7 +78,7 @@ class BakongApi
      */
     public function checkPaymentByMd5(string $md5, ?string $token = null): Response
     {
-        return $this->send('post', '/check_transaction_by_md5', ['md5' => $md5], $token);
+        return $this->send('post', '/v1/check_transaction_by_md5', ['md5' => $md5], $token);
     }
 
     /**
@@ -70,7 +86,7 @@ class BakongApi
      */
     public function checkPaymentByTransactionId(string $transactionId, ?string $token = null): Response
     {
-        return $this->send('post', '/check_transaction_by_id', ['id' => $transactionId], $token);
+        return $this->send('post', '/v1/check_transaction_by_id', ['id' => $transactionId], $token);
     }
 
     /**

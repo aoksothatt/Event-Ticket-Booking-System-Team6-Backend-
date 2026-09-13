@@ -20,15 +20,19 @@ return [
 
     'token' => env('BAKONG_TOKEN', ''),
 
-    // The Bakong-registered account ID (email/phone format, e.g. "user@bakrt").
+    // The Bakong-registered account ID (email/phone format, e.g. "user@bkrt").
+    // BakongService falls back to BAKONG_MERCHANT_ID when this is empty.
     'account_id' => env('BAKONG_ACCOUNT', ''),
 
     // Human-readable merchant display name shown on the KHQR code.
     // MUST NOT be an email address — use a plain name like "Aok Sothatt".
-    // Reads from BAKONG_MERCHANT_NAME first, falls back to BAKONG_MERCHANT for
-    // backward compatibility. If BAKONG_MERCHANT looks like an email, it will be
-    // ignored and you must set BAKONG_MERCHANT_NAME explicitly.
+    // Reads from BAKONG_MERCHANT_NAME first; BakongService falls back to
+    // BAKONG_MERCHANT (ignored when it looks like an email) and finally to
+    // APP_NAME so checkout never fails on an empty display name.
     'merchant_name' => env('BAKONG_MERCHANT_NAME', ''),
+
+    // Backwards-compatible merchant display-name alias.
+    'merchant' => env('BAKONG_MERCHANT', ''),
 
     // The Bakong merchant email/ID used for routing (e.g. "aok_sothatt@bkrt").
     'merchant_id' => env('BAKONG_MERCHANT_ID', ''),
@@ -65,14 +69,28 @@ return [
     |--------------------------------------------------------------------------
     | Payment Status Mapping
     |--------------------------------------------------------------------------
-    | Maps Bakong transaction statuses to internal payment statuses.
+    | Maps the transaction status strings returned by the Bakong Open API
+    | (check_transaction_by_md5 / check_transaction_by_id) to internal payment
+    | statuses.
+    |
+    | Bakong returns data.status values of:
+    |   SUCCESSFUL / COMPLETED  → transaction completed
+    |   PROCESSING / PENDING    → still in flight
+    |   FAILED                  → transaction failed
+    |   TIMEOUT                 → transaction timed out
+    |   INVALID                 → no transaction found for this MD5 yet
+    |                             (stays pending so the customer can still pay
+    |                              before the QR's expires_at passes)
     */
 
     'status_map' => [
         'COMPLETED' => 'paid',
-        'FAILED' => 'failed',
+        'SUCCESSFUL' => 'paid',
+        'PROCESSING' => 'pending',
         'PENDING' => 'pending',
+        'FAILED' => 'failed',
         'TIMEOUT' => 'expired',
+        'INVALID' => 'pending',
     ],
 
 ];

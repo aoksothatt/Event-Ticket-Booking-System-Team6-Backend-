@@ -98,6 +98,25 @@
 							"path": ["checkout"]
 						}
 					}
+				},
+				{
+					"name": "Create Checkout (Multi-Item Order)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event_id\": 12,\n  \"items\": [\n    { \"ticket_type_id\": 33, \"quantity\": 2 },\n    { \"ticket_type_id\": 34, \"quantity\": 1 }\n  ]\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{baseUrl}}/checkout",
+							"host": ["{{baseUrl}}"],
+							"path": ["checkout"]
+						}
+					}
 				}
 			]
 		},
@@ -165,6 +184,69 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["payments", "webhook"]
 						}
+					}
+				},
+				{
+					"name": "Verify Again (Already Paid - Idempotent)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/payments/{{paymentId}}/verify",
+							"host": ["{{baseUrl}}"],
+							"path": ["payments", "{{paymentId}}", "verify"]
+						},
+						"description": "Re-verifying an already PAID payment is idempotent: returns data.status = \"paid\" and never creates duplicate tickets."
+					}
+				},
+				{
+					"name": "Payment Status without Token (401 Unauthorized)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"auth": {
+							"type": "noauth"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/payments/{{paymentId}}/status",
+							"host": ["{{baseUrl}}"],
+							"path": ["payments", "{{paymentId}}", "status"]
+						},
+						"description": "Unauthenticated request. Expect 401 - unauthenticated."
+					}
+				},
+				{
+					"name": "Invalid / Non-existent Payment Id (404 Not Found)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/payments/999999999",
+							"host": ["{{baseUrl}}"],
+							"path": ["payments", "999999999"]
+						},
+						"description": "Look up a payment id that does not exist. Expect 404 - not found."
+					}
+				},
+				{
+					"name": "Another User's Payment (403 Forbidden)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Accept", "value": "application/json" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/payments/{{paymentId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["payments", "{{paymentId}}"]
+						},
+						"description": "Login as a different customer and request someone else's payment. Expect 403 - you do not own this payment."
 					}
 				}
 			]

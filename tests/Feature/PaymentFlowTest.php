@@ -11,6 +11,7 @@ use App\Models\Ticket;
 use App\Models\TicketType;
 use App\Models\User;
 use App\Models\Venue;
+use App\Services\Bakong\BakongException;
 use App\Services\Bakong\BakongService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -194,7 +195,7 @@ class PaymentFlowTest extends TestCase
         ]);
         $this->assertDatabaseHas('Booking', [
             'id' => $booking->id,
-            'status' => 'paid',
+            'status' => 'confirmed',
         ]);
         $this->assertSame(1, Ticket::where('booking_id', $booking->id)->count());
     }
@@ -411,7 +412,7 @@ class PaymentFlowTest extends TestCase
             'id' => $payment->id,
             'status' => 'paid',
         ]);
-        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'confirmed']);
         $this->assertSame(1, Ticket::where('booking_id', $booking->id)->count());
 
         // Re-delivery (replay): should be idempotent and not generate more tickets.
@@ -428,5 +429,534 @@ class PaymentFlowTest extends TestCase
         $this->postJson('/api/payments/webhook', ['md5' => 'anything'], [
             'X-Bakong-Signature' => 'wrong-secret',
         ])->assertStatus(403);
+    }
+
+    public function test_checkout_with_multiple_items_creates_one_booking_one_payment_and_one_qr(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $vip = TicketType::create([
+            'event_id' => $event->id,
+            'name' => 'VIP',
+            'price' => 100.00,
+            'quantity' => 50,
+            'sold_quantity' => 0,
+            'status' => 'active',
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('generateKhqr')
+            ->once()
+            ->withArgs(fn ($amount) => abs($amount - 151.00) < 0.001)
+            ->andReturn([
+                'md5' => 'md5-multi-1',
+                'khqr' => '000201010212multikhr',
+                'expires_at' => now()->addMinutes(15)->toIso8601String(),
+            ])
+            ->shouldReceive('generateDeeplink')
+            ->once()
+            ->andReturn(null);
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/checkout', [
+                'event_id' => $event->id,
+                'items' => [
+                    ['ticket_type_id' => $ticketType->id, 'quantity' => 2],
+                    ['ticket_type_id' => $vip->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.qr_payload', '000201010212multikhr')
+            ->assertJsonPath('data.payment.status', 'pending');
+
+        $bookings = Booking::where('user_id', $user->id)->get();
+        $this->assertCount(1, $bookings, 'A multi-item order must create exactly one booking.');
+        $this->assertSame('151.00', (string) $bookings->first()->total_amount);
+
+        $this->assertSame(1, Payment::where('booking_id', $bookings->first()->id)->count(), 'A multi-item order must create exactly one payment.');
+
+        $this->assertDatabaseHas('ticket_types', ['id' => $ticketType->id, 'sold_quantity' => 2]);
+        $this->assertDatabaseHas('ticket_types', ['id' => $vip->id, 'sold_quantity' => 1]);
+    }
+
+    public function test_checkout_retry_reuses_booking_and_creates_new_payment_reference(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-RETRY-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $old = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-20260911-OLD001',
+            'transaction_id' => 'PAY-20260911-OLD001',
+            'bakong_md5' => 'md5-old',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'expired',
+            'payment_status' => 'expired',
+            'expires_at' => now()->subMinutes(1),
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('generateKhqr')
+            ->once()
+            ->andReturn([
+                'md5' => 'md5-retry-1',
+                'khqr' => '000201010212retrykhr',
+                'expires_at' => now()->addMinutes(15)->toIso8601String(),
+            ])
+            ->shouldReceive('generateDeeplink')
+            ->once()
+            ->andReturn('https://bakong.page.link/retry');
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/checkout', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.payment.id', static fn ($id) => is_int($id) && $id > 0)
+            ->assertJsonPath('data.booking.id', $booking->id);
+
+        $newPaymentId = $response->json('data.payment.id');
+        $this->assertNotSame($old->id, $newPaymentId, 'Retry must create a new payment record.');
+        $this->assertNotSame('PAY-20260911-OLD001', $response->json('data.payment.transaction_reference'));
+
+        $this->assertSame(1, Booking::where('user_id', $user->id)->count(), 'Retry must not create a duplicate booking.');
+        $this->assertSame(2, Payment::where('booking_id', $booking->id)->count(), 'Retry must add a new payment alongside the expired one.');
+        $this->assertDatabaseHas('payments', ['id' => $old->id, 'status' => 'expired']);
+        $this->assertDatabaseHas('payments', ['id' => $newPaymentId, 'status' => 'pending']);
+    }
+
+    public function test_checkout_retry_rejects_another_users_booking(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+        $other = User::factory()->create(['role' => 'customer']);
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-RETRY-002',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+
+        $this->withHeaders($this->authHeaders($other))
+            ->postJson('/api/checkout', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ])->assertStatus(403)
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_checkout_retry_of_confirmed_booking_is_idempotent(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-RETRY-003',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'confirmed',
+        ]);
+        $paid = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-20260911-PAID01',
+            'transaction_id' => 'PAY-20260911-PAID01',
+            'bakong_md5' => 'md5-paid',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'paid',
+            'payment_status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        $this->mock(BakongService::class)->shouldReceive('generateKhqr')->never();
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/checkout', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.payment.id', $paid->id)
+            ->assertJsonPath('data.payment.status', 'paid')
+            ->assertJsonPath('data.qr_payload', '')
+            ->assertJsonPath('data.deeplink', null);
+
+        $this->assertSame(1, Payment::where('booking_id', $booking->id)->count(), 'No new payment should be created for an already-paid booking.');
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'Retry of a paid booking must never issue duplicate tickets.');
+    }
+
+    public function test_checkout_retry_returns_existing_active_payment_until_it_expires(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-RETRY-004',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $active = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-20260911-ACTIVE1',
+            'transaction_id' => 'PAY-20260911-ACTIVE1',
+            'bakong_md5' => 'md5-active',
+            'qr_payload' => '000201010212activekhr',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'pending',
+            'payment_status' => 'pending',
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->mock(BakongService::class)->shouldReceive('generateKhqr')->never();
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/checkout', [
+                'event_id' => $event->id,
+                'booking_id' => $booking->id,
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('data.payment.id', $active->id)
+            ->assertJsonPath('data.qr_payload', '000201010212activekhr');
+
+        $this->assertSame(1, Payment::where('booking_id', $booking->id)->count());
+    }
+
+    public function test_legacy_payments_store_never_marks_paid_without_verification(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-LEGACY-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        // Even if a customer explicitly asks for a "paid" status, the legacy
+        // endpoint must only record a pending payment and must NEVER confirm a
+        // booking or issue tickets without Bakong verification.
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments', [
+                'booking_id' => $booking->id,
+                'payment_method' => 'bakong_khqr',
+                'payment_status' => 'paid',
+                'amount' => 1.00, // client-supplied amount must be ignored too
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonPath('data.amount', '25.50');
+
+        $this->assertSame(1, \App\Models\Payments::where('booking_id', $booking->id)->count());
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued without Bakong verification.');
+    }
+
+    public function test_payments_index_is_scoped_for_customers(): void
+    {
+        ['user' => $user, 'event' => $event] = $this->makeEventWithTicket();
+        $other = User::factory()->create(['role' => 'customer']);
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-SCOPE-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 10.00,
+            'status' => 'pending',
+        ]);
+        \App\Models\Payments::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-SCOPE-001',
+            'transaction_id' => 'PAY-SCOPE-001',
+            'amount' => 10.00,
+            'currency' => 'USD',
+            'status' => 'pending',
+            'payment_status' => 'pending',
+        ]);
+
+        // The owner sees exactly one payment.
+        $this->withHeaders($this->authHeaders($user))
+            ->getJson('/api/payments')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        // Another customer sees none of the owner's payments.
+        $this->withHeaders($this->authHeaders($other))
+            ->getJson('/api/payments')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    /**
+     * A Bakong transaction for a DIFFERENT amount than the payment must NEVER
+     * confirm the booking or issue tickets.
+     */
+    public function test_verify_does_not_confirm_on_amount_mismatch(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-AMT-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-AMT-001',
+            'transaction_id' => 'PAY-AMT-001',
+            'bakong_md5' => 'md5-amt-1',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'pending',
+            'payment_status' => 'pending',
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('checkTransactionByMd5')
+            ->once()
+            ->with('md5-amt-1')
+            ->andReturn([
+                'status' => 'paid',
+                'transaction_id' => 'BAKONG-TXN-LOW',
+                'amount' => '5.00',
+                'currency' => 'USD',
+                'raw' => ['data' => ['status' => 'COMPLETED']],
+            ]);
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/verify');
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'failed');
+
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'failed']);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued for a mismatched transaction.');
+    }
+
+    /**
+     * A 401 from Bakong (invalid/expired credential) must yield a clean,
+     * actionable error — never a successful/paid payment.
+     */
+    public function test_verify_returns_clean_error_on_bakong_401(): void
+    {
+        ['user' => $user, 'event' => $event] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-401-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'total_amount' => 10.00,
+            'status' => 'pending',
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-401-001',
+            'transaction_id' => 'PAY-401-001',
+            'bakong_md5' => 'md5-401-1',
+            'currency' => 'USD',
+            'amount' => 10.00,
+            'status' => 'pending',
+            'payment_status' => 'pending',
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('checkTransactionByMd5')
+            ->once()
+            ->with('md5-401-1')
+            ->andThrow(new BakongException('Bakong authentication failed. Please configure a valid Bakong API credential.', 401));
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/verify');
+
+        $response->assertStatus(401)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Bakong authentication failed. Please configure a valid Bakong API credential.');
+
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'pending']);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count());
+    }
+
+    /**
+     * When Bakong reports a FAILED transaction the payment must be persisted
+     * as failed locally (both status columns) so the admin dashboard and the
+     * customer state machine reflect reality instead of staying "pending".
+     */
+    public function test_verify_persists_failed_when_bakong_reports_failed(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-FAIL-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'subtotal' => 25.50,
+            'discount' => 0,
+            'service_fee' => 0,
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-FAIL-001',
+            'transaction_id' => 'PAY-FAIL-001',
+            'bakong_md5' => 'md5-failed-1',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'pending',
+            'payment_status' => 'pending',
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('checkTransactionByMd5')
+            ->once()
+            ->with('md5-failed-1')
+            ->andReturn([
+                'status' => 'failed',
+                'transaction_id' => 'BAKONG-TXN-FAILED',
+                'raw' => ['data' => ['status' => 'FAILED']],
+            ]);
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/verify');
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'failed');
+
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'failed', 'payment_status' => 'failed']);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued for a failed transaction.');
+    }
+
+    /**
+     * When Bakong reports a TIMEOUT transaction the payment must be persisted
+     * as expired locally so a later retry can move the booking forward.
+     */
+    public function test_verify_persists_expired_when_bakong_reports_timeout(): void
+    {
+        ['user' => $user, 'event' => $event, 'ticketType' => $ticketType] = $this->makeEventWithTicket();
+
+        $booking = Booking::create([
+            'booking_number' => 'BK-EXPIRE-001',
+            'user_id' => $user->id,
+            'event_id' => $event->id,
+            'booking_date' => now(),
+            'subtotal' => 25.50,
+            'discount' => 0,
+            'service_fee' => 0,
+            'total_amount' => 25.50,
+            'status' => 'pending',
+        ]);
+        $booking->items()->create([
+            'ticket_type_id' => $ticketType->id,
+            'quantity' => 1,
+            'unit_price' => 25.50,
+            'subtotal' => 25.50,
+        ]);
+
+        $payment = Payment::create([
+            'booking_id' => $booking->id,
+            'provider' => 'bakong',
+            'transaction_reference' => 'PAY-EXPIRE-001',
+            'transaction_id' => 'PAY-EXPIRE-001',
+            'bakong_md5' => 'md5-timeout-1',
+            'currency' => 'USD',
+            'amount' => 25.50,
+            'status' => 'pending',
+            'payment_status' => 'pending',
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->mock(BakongService::class)
+            ->shouldReceive('checkTransactionByMd5')
+            ->once()
+            ->with('md5-timeout-1')
+            ->andReturn([
+                'status' => 'expired',
+                'transaction_id' => 'BAKONG-TXN-TIMEOUT',
+                'raw' => ['data' => ['status' => 'TIMEOUT']],
+            ]);
+
+        $response = $this->withHeaders($this->authHeaders($user))
+            ->postJson('/api/payments/'.$payment->id.'/verify');
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status', 'expired');
+
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'expired', 'payment_status' => 'expired']);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id, 'status' => 'pending']);
+        $this->assertSame(0, Ticket::where('booking_id', $booking->id)->count(), 'No tickets may be issued for an expired transaction.');
     }
 }

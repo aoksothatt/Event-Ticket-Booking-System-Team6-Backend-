@@ -67,8 +67,39 @@ class PaymentVerificationService
             $this->payments->setBakongTransactionId($payment, $result['transaction_id']);
         }
 
+        // Persist terminal non-paid outcomes so local state (and the admin
+        // dashboard) reflects what Bakong reports instead of staying "pending".
+        if ($result['status'] === Payment::STATUS_FAILED) {
+            $this->payments->markFailed($payment);
+            return ['status' => $payment->status, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
+        }
+
+        if ($result['status'] === Payment::STATUS_EXPIRED) {
+            $this->payments->markExpired($payment);
+            return ['status' => $payment->status, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
+        }
+
         if ($result['status'] !== Payment::STATUS_PAID) {
             return ['status' => $result['status'], 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
+        }
+
+        // Security gate: only confirm when the Bakong transaction actually
+        // matches this payment's expected amount and currency. A transaction
+        // for a different amount (e.g. $5.00 against a $25.00 booking) must
+        // NEVER confirm the booking.
+        if ($this->transactionAmountMismatch($payment, $result)) {
+            Log::channel('bakong')->error('Payment confirmation blocked: Bakong transaction does not match the payment.', [
+                'payment_id' => $payment->id,
+                'booking_id' => $payment->booking_id,
+                'expected_amount' => $payment->amount,
+                'expected_currency' => $payment->currency,
+                'bakong_amount' => $result['amount'] ?? null,
+                'bakong_currency' => $result['currency'] ?? null,
+            ]);
+
+            $this->payments->markFailed($payment);
+
+            return ['status' => $payment->status, 'changed' => false, 'payment' => $payment, 'booking' => $payment->booking];
         }
 
         // Confirmed paid — do the transactional, idempotent confirmation.
@@ -77,6 +108,62 @@ class PaymentVerificationService
         });
 
         return ['status' => $confirmed['payment']->status, 'changed' => true, 'payment' => $confirmed['payment'], 'booking' => $confirmed['booking']];
+    }
+
+    /**
+     * Returns true when the Bakong transaction amount/currency disagree with
+     * the expected payment. When Bakong does not return an amount/currency at
+     * all there is nothing to compare, so the check is skipped (a warning is
+     * logged instead — this is more lenient than blocking a real payment).
+     */
+    protected function transactionAmountMismatch(Payment $payment, array $result): bool
+    {
+        $bakongAmount = $result['amount'] ?? null;
+        $bakongCurrency = $result['currency'] ?? null;
+
+        if (($bakongAmount === null || $bakongAmount === '') && ($bakongCurrency === null || $bakongCurrency === '')) {
+            Log::channel('bakong')->warning('Bakong transaction returned no amount/currency — amount verification skipped.', [
+                'payment_id' => $payment->id,
+            ]);
+
+            return false;
+        }
+
+        if ($bakongCurrency !== null && $bakongCurrency !== '') {
+            $expected = strtoupper((string) $payment->currency ?: config('bakong.currency', 'USD'));
+            $actual = $this->normalizeCurrency($bakongCurrency);
+
+            if ($actual !== '' && $actual !== $expected) {
+                return true;
+            }
+        }
+
+        if ($bakongAmount !== null && $bakongAmount !== '') {
+            $expected = (float) $payment->amount;
+            $actual = (float) $bakongAmount;
+
+            if (abs(round($expected, 2) - round($actual, 2)) >= 0.005) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Bakong may report the transaction currency as an ISO code ("USD"/"KHR")
+     * or as the numeric ISO-4217 code ("840"/"116"). Normalise both to the
+     * uppercase ISO code used internally.
+     */
+    protected function normalizeCurrency(mixed $value): string
+    {
+        if (is_int($value) || (is_string($value) && ctype_digit((string) $value))) {
+            $codes = array_flip(config('bakong.currency_codes', []));
+
+            return (string) ($codes[(int) $value] ?? $value);
+        }
+
+        return strtoupper((string) $value);
     }
 
     /**
@@ -102,8 +189,8 @@ class PaymentVerificationService
         $booking = Booking::whereKey($payment->booking_id)->lockForUpdate()->first();
         $changed = false;
 
-        if ($booking && $booking->status !== 'paid' && $booking->status !== 'confirmed') {
-            $booking->update(['status' => 'paid']);
+        if ($booking && ! in_array($booking->status, ['paid', 'confirmed'], true)) {
+            $booking->update(['status' => 'confirmed']);
             $changed = true;
         }
 
