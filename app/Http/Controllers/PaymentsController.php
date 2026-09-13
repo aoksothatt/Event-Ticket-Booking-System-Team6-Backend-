@@ -21,7 +21,7 @@ class PaymentsController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Payments::with(['booking.user', 'booking.event', 'booking.tickets'])->latest();
+        $query = Payment::with(['booking.user', 'booking.event', 'booking.tickets'])->latest();
 
         if ($user->role === Role::CUSTOMER->value) {
             $query->whereHas('booking', fn($q) => $q->where('user_id', $user->id));
@@ -45,7 +45,7 @@ class PaymentsController extends Controller
     {
         return response()->json([
             'success' => true,
-            'data' => Payments::with(['booking.event'])
+            'data' => Payment::with(['booking.event'])
                 ->whereHas('booking', fn($q) => $q->where('user_id', $request->user()->id))
                 ->latest()
                 ->get()
@@ -81,7 +81,7 @@ class PaymentsController extends Controller
             ], 403);
         }
 
-        $payment = Payments::where('booking_id', $booking->id)
+        $payment = Payment::where('booking_id', $booking->id)
             ->where('status', Payment::STATUS_PAID)
             ->latest('id')
             ->first();
@@ -100,13 +100,13 @@ class PaymentsController extends Controller
         }
 
         // Reuse a still-active pending payment instead of stacking duplicates.
-        $payment = Payments::where('booking_id', $booking->id)
+        $payment = Payment::where('booking_id', $booking->id)
             ->where('status', Payment::STATUS_PENDING)
             ->latest('id')
             ->first();
 
         if (! $payment) {
-            $payment = Payments::create([
+            $payment = Payment::create([
                 'booking_id'           => $booking->id,
                 'provider'             => Payment::PROVIDER_BAKONG,
                 'payment_method'       => $validated['payment_method'] ?? 'bakong_khqr',
