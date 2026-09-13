@@ -52,7 +52,7 @@ class BookingController extends Controller
                 $available = $ticket->quantity - $ticket->sold_quantity;
 
                 if($item['quantity'] > $available){
-                    abort(422, "Not enough tickets available.");
+                    abort(422, __('messages.not_enough_tickets'));
                 }
 
                 $totalAmount += $ticket->price * $item['quantity'];
@@ -91,7 +91,7 @@ class BookingController extends Controller
         });
         return response()->json([
             'success' => true,
-            'message' => 'Booking created successfully',
+            'message' => __('messages.booking_created'),
             'data' => $booking->load(
                 'items.ticketType',
                 'event',
@@ -145,7 +145,7 @@ class BookingController extends Controller
 
         return response()->json([
             'success' =>true,
-            'message' => "Booking updated successfully",
+            'message' => __('messages.booking_updated'),
             'data' => $booking->fresh(['items.ticketType'])
         ]);
     }
@@ -157,7 +157,7 @@ class BookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Booking deleted successfully'
+            'message' => __('messages.booking_deleted')
         ]);
     }
 }

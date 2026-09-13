@@ -12,9 +12,20 @@ class CategoriesController extends Controller
     {
         $categorys = Category::get();
         return response()->json([
-            "message" => "get all category succesfully",
+            "message" => __('messages.categories_retrieved'),
             "status" => true,
             "data" => $categorys
+        ]);
+    }
+
+    public function show($id)
+    {
+        $category = Category::findOrFail($id);
+
+        return response()->json([
+            "message" => __('messages.category_retrieved'),
+            "status" => true,
+            "data" => $category
         ]);
     }
 
@@ -29,7 +40,7 @@ class CategoriesController extends Controller
         $categorys = Category::create($validated);
 
         return response()->json([
-            "message" => "create category succesfully",
+            "message" => __('messages.category_created'),
             "status" => true,
             "data" => $categorys
         ]);
@@ -38,15 +49,15 @@ class CategoriesController extends Controller
     public function update(Request $request, $id)
     {
         $category = Category::findOrFail($id);
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:100|unique:categories,name,' . $category->id,
             'description' => 'nullable|string',
             'status' => 'nullable|in:active,inactive',
         ]);
-        $category->update($request->validated());
+        $category->update($validated);
 
         return response()->json([
-            "message" => "update category succesfully",
+            "message" => __('messages.category_updated'),
             "status" => true,
             "data" => $category
         ]);
@@ -59,7 +70,7 @@ class CategoriesController extends Controller
         $category->delete();
 
         return response()->json([
-            "message" => "create category succesfully",
+            "message" => __('messages.category_deleted'),
             "status" => true,
             "data" => $category
         ]);

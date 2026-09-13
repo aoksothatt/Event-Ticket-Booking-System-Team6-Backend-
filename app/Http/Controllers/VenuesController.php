@@ -49,7 +49,7 @@ class VenuesController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Venue created successfully',
+            'message' => __('messages.venue_created'),
             'data' => $venue,
         ], 201);
     }
@@ -62,7 +62,7 @@ class VenuesController extends Controller
         if (!$venue) {
             return response()->json([
                 'success' => false,
-                'message' => 'Venue not found',
+                'message' => __('messages.venue_not_found'),
             ], 404);
         }
 
@@ -80,7 +80,7 @@ class VenuesController extends Controller
         if (!$venue) {
             return response()->json([
                 'success' => false,
-                'message' => 'Venue not found',
+                'message' => __('messages.venue_not_found'),
             ], 404);
         }
 
@@ -99,7 +99,7 @@ class VenuesController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Venue updated successfully',
+            'message' => __('messages.venue_updated'),
             'data' => $venue,
         ]);
     }
@@ -112,7 +112,7 @@ class VenuesController extends Controller
         if (!$venue) {
             return response()->json([
                 'success' => false,
-                'message' => 'Venue not found',
+                'message' => __('messages.venue_not_found'),
             ], 404);
         }
 
@@ -120,7 +120,7 @@ class VenuesController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Venue deleted successfully',
+            'message' => __('messages.venue_deleted'),
         ]);
     }
 }

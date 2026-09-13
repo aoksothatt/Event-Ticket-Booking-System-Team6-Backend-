@@ -44,7 +44,7 @@ class UsersController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'User created successfully',
+            'message' => __('messages.user_created'),
             'data' => $user,
         ], 201);
     }
@@ -82,7 +82,7 @@ class UsersController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'User updated successfully',
+            'message' => __('messages.user_updated'),
             'data' => $user,
         ]);
     }
@@ -94,7 +94,7 @@ class UsersController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'User deleted successfully',
+            'message' => __('messages.user_deleted'),
         ]);
     }
 }

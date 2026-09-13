@@ -19,7 +19,7 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('ticket_code', 40)->unique();
             $table->string('qr_token', 255)->nullable()->unique();
-            $table->string('status', 20)->default('active');
+            $table->string('status', 20)->default('ACTIVE');
             $table->timestamp('used_at')->nullable();
             $table->timestamps();
         });

@@ -78,7 +78,7 @@ class PaymentsController extends Controller
         if ($request->user('api')->role === Role::CUSTOMER->value && (int) $booking->user_id !== (int) $request->user('api')->id) {
             return response()->json([
                 'success' => false,
-                'message' => 'You can only pay for your own bookings.',
+                'message' => __('messages.cannot_pay_others_bookings'),
             ], 403);
         }
 
@@ -127,7 +127,7 @@ class PaymentsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Payment recorded as pending. Scan the KHQR to pay.',
+            'message' => __('messages.payment_created'),
             'data' => $payment->load('booking', 'booking.tickets')
         ], 201);
     }

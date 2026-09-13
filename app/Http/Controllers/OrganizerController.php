@@ -37,7 +37,7 @@ class OrganizerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Organizer created successfully',
+            'message' => __('messages.organizer_created'),
             'data' => $organizer
         ], 201);
     }
@@ -74,7 +74,7 @@ class OrganizerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Organizer updated successfully',
+            'message' => __('messages.organizer_updated'),
             'data' => $organizer
         ], 200);
     }
@@ -88,7 +88,7 @@ class OrganizerController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Organizer deleted successfully'
+            'message' => __('messages.organizer_deleted')
         ], 200);
     }
 }

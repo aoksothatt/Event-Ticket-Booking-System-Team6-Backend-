@@ -64,7 +64,7 @@ class EventsController extends Controller
             'is_trending' => $validated['is_trending'],
         ]);
 
-        $message = $event->is_trending ? 'Event added to Trending.' : 'Event removed from Trending.';
+        $message = $event->is_trending ? __('messages.event_added_trending') : __('messages.event_removed_trending');
 
         return response()->json([
             'success' => true,
@@ -121,7 +121,7 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Event created successfully',
+            'message' => __('messages.event_created'),
             'data' => $event->load(['venue', 'category']),
         ], 201);
     }
@@ -177,7 +177,7 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Event updated successfully',
+            'message' => __('messages.event_updated'),
             'data' => $event->fresh(['venue', 'category']),
         ]);
     }
@@ -191,7 +191,7 @@ class EventsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Event deleted successfully',
+            'message' => __('messages.event_deleted'),
         ]);
     }
 }

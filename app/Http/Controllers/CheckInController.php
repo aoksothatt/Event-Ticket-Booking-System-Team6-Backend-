@@ -58,7 +58,7 @@ class CheckInController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => ' Check-in successfully',
+            'message' => __('messages.checkin_created'),
             'data' => $checkIn->load([
                 'booking',
                 'ticket',
@@ -96,7 +96,7 @@ class CheckInController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Check-in updated successfully',
+            'message' => __('messages.checkin_updated'),
             'data' => $checkIn
         ]);
     }

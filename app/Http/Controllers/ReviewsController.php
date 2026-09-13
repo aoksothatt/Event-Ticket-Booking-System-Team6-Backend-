@@ -35,7 +35,7 @@ class ReviewsController extends Controller
         if ($existing) {
             return response()->json([
                 'success' => false,
-                'message' => 'You have already reviewed this event. Use PUT to update your review.',
+                'message' => __('messages.already_reviewed_event'),
                 'data' => $existing->load('user', 'event'),
             ], 409);
         }
@@ -50,7 +50,7 @@ class ReviewsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Review created successfully',
+            'message' => __('messages.review_created'),
             'data' => $review->load('user', 'event'),
         ], 201);
     }
@@ -96,7 +96,7 @@ class ReviewsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Review updated successfully',
+            'message' => __('messages.review_updated'),
             'data' => $review,
         ]);
     }
@@ -110,7 +110,7 @@ class ReviewsController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Review deleted successfully',
+            'message' => __('messages.review_deleted'),
         ]);
     }
 }

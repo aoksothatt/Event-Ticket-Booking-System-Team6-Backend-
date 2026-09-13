@@ -14,7 +14,7 @@ class TicketTypeController extends Controller
         $ticketType = TicketType::with('event')->get();
 
         return response()->json([
-            'message' => 'get all ticket',
+            'message' => __('messages.ticket_type_retrieved'),
             'status' => true,
             'data' => $ticketType,
         ], 200);
@@ -35,7 +35,7 @@ class TicketTypeController extends Controller
         $ticketType = TicketType::create($validated);
 
         return response()->json([
-            'message' => 'ticket create !!',
+            'message' => __('messages.ticket_type_created'),
             'status' => true,
             'data' => $ticketType,
         ], 200);
@@ -48,13 +48,13 @@ class TicketTypeController extends Controller
         if (! $ticketType) {
             return response()->json([
                 'status' => false,
-                'message' => 'Ticket type not found!',
+                'message' => __('messages.ticket_type_not_found'),
             ], 404);
         }
 
         return response()->json([
             'status' => true,
-            'message' => 'Ticket type retrieved successfully!',
+            'message' => __('messages.ticket_type_retrieved'),
             'data' => $ticketType,
         ], 200);
     }
@@ -79,7 +79,7 @@ class TicketTypeController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Ticket type Update successfully!',
+            'message' => __('messages.ticket_type_updated'),
             'data' => $ticketType,
         ], 200);
     }
@@ -96,7 +96,7 @@ class TicketTypeController extends Controller
         if ($ticketCount > 0) {
             return response()->json([
                 'status' => false,
-                'message' => "This ticket type cannot be deleted because it already has {$ticketCount} issued customer ticket(s). Set its status to inactive or sold_out instead.",
+                'message' => __('messages.ticket_type_has_issued_tickets', ['count' => $ticketCount]),
             ], 409);
         }
 
@@ -104,7 +104,7 @@ class TicketTypeController extends Controller
         if ($ticketType->bookingItems()->exists()) {
             return response()->json([
                 'status' => false,
-                'message' => 'This ticket type cannot be deleted because it is referenced by existing booking items.',
+                'message' => __('messages.ticket_type_referenced_by_bookings'),
             ], 409);
         }
 
@@ -112,7 +112,7 @@ class TicketTypeController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Ticket type deleted!',
+            'message' => __('messages.ticket_type_deleted'),
             'data' => $ticketType,
         ], 200);
     }
@@ -134,7 +134,7 @@ class TicketTypeController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Ticket type status set to '.$validated['status'].'.',
+            'message' => __('messages.ticket_type_status_updated', ['status' => $validated['status']]),
             'data' => $ticketType->fresh(),
         ], 200);
     }
