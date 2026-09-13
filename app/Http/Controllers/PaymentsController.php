@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Models\Booking;
 use App\Models\Payment;
-use App\Models\Payments;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
