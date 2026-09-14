@@ -149,7 +149,10 @@ class PaymentController extends Controller
             'success' => true,
             'data' => [
                 'payment' => new PaymentResource($result['payment']->fresh('booking')),
+                'payment_id' => $result['payment']->id,
                 'status' => $result['status'],
+                'booking_id' => $booking?->id,
+                'booking_number' => $booking?->booking_number,
                 'booking_status' => $booking?->status,
                 'tickets_generated' => $ticketsGenerated,
                 'tickets' => $booking
@@ -201,7 +204,10 @@ class PaymentController extends Controller
             'success' => true,
             'data' => [
                 'payment' => new PaymentResource($result['payment']->fresh('booking')),
+                'payment_id' => $result['payment']->id,
                 'status' => $result['status'],
+                'booking_id' => $booking?->id,
+                'booking_number' => $booking?->booking_number,
                 'booking_status' => $booking?->status,
                 'tickets_generated' => $result['changed'],
                 'tickets' => $booking

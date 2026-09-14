@@ -10,14 +10,25 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 class BookingController extends Controller
 {
-    public function index(){
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
         $bookings = Booking::with([
             'user',
             'event',
             'event.venue',
             'items.ticketType',
-            'payments'
-        ])->latest()->get();
+            'paymentRecords',
+            'tickets.ticketType',
+        ])
+            ->when($user->role === 'customer', fn ($q) => $q->where('user_id', $user->id))
+            ->when($user->role === 'organizer', function ($q) use ($user) {
+                $organizerId = $user->organizerProfile?->id;
+                $q->whereHas('event', fn ($eq) => $eq->where('organizer_id', $organizerId));
+            })
+            ->latest()
+            ->get();
 
         return response()->json([
             'success' => true,
@@ -101,16 +112,33 @@ class BookingController extends Controller
         ], 201);
     }
 
-    public function show($id){
+    public function show(Request $request, $id)
+    {
+        $user = $request->user();
+
         $booking = Booking::with([
             'user',
             'event',
             'event.venue',
             'items.ticketType',
-            'payments',
+            'paymentRecords',
             'checkIns',
             'tickets.ticketType',
         ])->findOrFail($id);
+
+        if ($user->role === 'customer' && (int) $booking->user_id !== (int) $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => __('messages.forbidden'),
+            ], 403);
+        }
+
+        if ($user->role === 'organizer' && $booking->event !== null && (int) $booking->event->organizer_id !== (int) $user->organizerProfile?->id) {
+            return response()->json([
+                'success' => false,
+                'message' => __('messages.forbidden'),
+            ], 403);
+        }
 
         return response()->json([
             'success' => true,

@@ -66,8 +66,8 @@ class DashboardController extends Controller
             ->sum('amount');
 
         $totalTickets = Ticket::where('user_id', $user->id)->count();
-        $activeTickets = Ticket::where('user_id', $user->id)->where('status', 'active')->count();
-        $usedTickets = Ticket::where('user_id', $user->id)->where('status', 'used')->count();
+        $activeTickets = Ticket::where('user_id', $user->id)->where('status', Ticket::ACTIVE)->count();
+        $usedTickets = Ticket::where('user_id', $user->id)->where('status', Ticket::USED)->count();
 
         $totalCheckIns = CheckIn::whereHas('booking', fn ($q) => $q->where('user_id', $user->id))->count();
         $checkedInCount = CheckIn::where('status', 'checked_in')

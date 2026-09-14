@@ -399,6 +399,7 @@ class CheckoutController extends Controller
         $payment = $this->payments->create([
             'booking_id' => $booking->id,
             'provider' => Payment::PROVIDER_BAKONG,
+            'payment_method' => 'bakong_khqr',
             'transaction_reference' => $reference,
             'transaction_id' => $reference,
             'currency' => config('bakong.currency', 'USD'),

@@ -18,6 +18,7 @@ class PaymentResource extends JsonResource
             'id' => $this->id,
             'booking_id' => $this->booking_id,
             'provider' => $this->provider,
+            'payment_method' => $this->payment_method ?? 'bakong_khqr',
             'transaction_reference' => $this->transaction_reference,
             'bakong_md5' => $this->bakong_md5,
             'bakong_transaction_id' => $this->bakong_transaction_id,
