@@ -117,6 +117,7 @@ class PaymentController extends Controller
                 'expires_at' => $record->expires_at?->toIso8601String(),
                 'booking_id' => $record->booking_id,
                 'booking_status' => $record->booking?->status,
+                'message' => $record->status === Payment::STATUS_PAID ? 'YOU PAID' : null,
             ],
         ]);
     }
@@ -151,6 +152,7 @@ class PaymentController extends Controller
 
         $booking = $result['booking'];
         $ticketsGenerated = $result['changed'];
+        $paymentMessage = $ticketsGenerated ? 'YOU PAID' : null;
 
         return response()->json([
             'success' => true,
@@ -162,6 +164,7 @@ class PaymentController extends Controller
                 'booking_number' => $booking?->booking_number,
                 'booking_status' => $booking?->status,
                 'tickets_generated' => $ticketsGenerated,
+                'message' => $paymentMessage,
                 'tickets' => $booking
                     ? $booking->tickets()->with('ticketType')->get()
                     : [],
