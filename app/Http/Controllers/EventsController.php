@@ -423,6 +423,9 @@ class EventsController extends Controller
         // Ensure description is never null (DB column is NOT NULL)
         $validated['description'] = $validated['description'] ?? '';
 
+        // Default status to published when not specified
+        $validated['status'] = $validated['status'] ?? 'published';
+
         // Store the uploaded banner image instead of its temp path
         if ($request->hasFile('banner')) {
             $validated['banner'] = $request->file('banner')->store('events', 'public');
