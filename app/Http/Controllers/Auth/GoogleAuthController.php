@@ -21,7 +21,6 @@ class GoogleAuthController extends Controller
 
         return Socialite::driver('google')
             ->stateless()
-            ->prompt('select_account')
             ->redirect();
     }
 

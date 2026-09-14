@@ -692,6 +692,8 @@ class BakongService
             $name = (string) config('bakong.merchant');
             if ($name === '' || str_contains($name, '@')) {
                 $name = trim((string) config('app.name', 'Event Booking'), '"');
+                // KHQR merchant name has a 25-character limit
+                $name = mb_substr($name, 0, 25, 'UTF-8');
                 Log::channel('bakong')->warning('BAKONG_MERCHANT_NAME not set — falling back to APP_NAME for the KHQR display name.', [
                     'merchant_name' => $name,
                 ]);
