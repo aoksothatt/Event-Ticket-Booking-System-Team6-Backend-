@@ -155,7 +155,7 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::get('/settings', [SettingsController::class, 'index']);
     Route::match(['put', 'patch'], '/settings', [SettingsController::class, 'update']);
 
-    Route::apiResource('users', UsersController::class);
+    Route::apiResource('users', UsersController::class)->names('admin.');
 
     Route::post('/categories', [CategoriesController::class, 'store']);
     Route::match(['put', 'patch'], '/categories/{id}', [CategoriesController::class, 'update']);
