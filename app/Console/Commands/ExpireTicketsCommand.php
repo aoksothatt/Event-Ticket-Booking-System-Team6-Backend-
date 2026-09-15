@@ -1,42 +1,41 @@
-<?php
+ <?php
 
-namespace App\Console\Commands;
+    namespace App\Console\Commands;
 
-use App\Services\TicketExpirationService;
-use Illuminate\Console\Command;
+    use App\Services\TicketExpirationService;
+    use Illuminate\Console\Command;
 
-class ExpireTicketsCommand extends Command
-{
-    protected $signature = 'tickets:expire';
+    class ExpireTicketsCommand extends Command
+    {
+        protected $signature = 'tickets:expire';
 
-    protected $description =
+        protected $description =
         'Expire active tickets when their event has ended';
 
-    public function handle(
-        TicketExpirationService $ticketExpirationService
-    ): int {
+        public function handle(
+            TicketExpirationService $ticketExpirationService
+        ): int {
 
-        try {
+            try {
 
-            $expired =
-                $ticketExpirationService->expireTickets();
+                $expired =
+                    $ticketExpirationService->expireTickets();
 
-            $this->info(
-                "Successfully expired {$expired} ticket(s)."
-            );
+                $this->info(
+                    "Successfully expired {$expired} ticket(s)."
+                );
 
-            return self::SUCCESS;
+                return self::SUCCESS;
+            } catch (\Throwable $e) {
 
-        } catch (\Throwable $e) {
+                report($e);
 
-            report($e);
+                $this->error(
+                    'Failed to expire tickets: ' .
+                        $e->getMessage()
+                );
 
-            $this->error(
-                'Failed to expire tickets: '.
-                $e->getMessage()
-            );
-
-            return self::FAILURE;
+                return self::FAILURE;
+            }
         }
     }
-}
