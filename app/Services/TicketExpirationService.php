@@ -17,9 +17,15 @@ class TicketExpirationService
      * it with end_date to build a real timestamp. Tickets whose event end
      * datetime is in the past are marked EXPIRED and logged.
      *
+     * When a user id is given, only that user's tickets are expired — used
+     * on-demand by the customer "My Tickets" endpoints so an ended event's
+     * ticket leaves the current list immediately instead of waiting for the
+     * scheduled command to run.
+     *
+     * @param int|null $userId Scope the expiry to a single user.
      * @return int number of tickets expired
      */
-    public function expireTickets(): int
+    public function expireTickets(?int $userId = null): int
     {
         $now = now('UTC');
 
@@ -27,6 +33,7 @@ class TicketExpirationService
         // comparison is done against an actual timestamp, not raw TIME data.
         $activeTickets = Ticket::query()
             ->whereIn('status', [Ticket::ACTIVE, Ticket::DONE])
+            ->when($userId !== null, fn ($query) => $query->where('user_id', $userId))
             ->with('event')
             ->get();
 

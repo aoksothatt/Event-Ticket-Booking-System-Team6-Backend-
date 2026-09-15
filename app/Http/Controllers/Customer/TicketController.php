@@ -23,6 +23,11 @@ class TicketController extends Controller
      */
     public function myTickets(Request $request)
     {
+        // On-demand expiry: an event that has already ended must drop off the
+        // "current" list right now, without waiting for the scheduled
+        // `tickets:expire` command to run. Expired tickets surface in history().
+        $this->expiration->expireTickets($request->user()->id);
+
         $tickets = Ticket::query()
             ->with(['ticketType.event.venue', 'booking', 'event', 'ticketCheckins'])
             ->visibleToUser()
@@ -42,6 +47,10 @@ class TicketController extends Controller
      */
     public function history(Request $request)
     {
+        // Keeps the "History" tab consistent with the "Current" tab even when
+        // /my-tickets and /my/tickets/history are fetched at the same time.
+        $this->expiration->expireTickets($request->user()->id);
+
         $tickets = Ticket::query()
             ->with(['ticketType.event.venue', 'booking', 'logs'])
             ->history()
