@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Event extends Model
 {
@@ -82,6 +83,15 @@ class Event extends Model
         return $this->images();
     }
 
+    /**
+     * Primary cover/poster image (lowest sort_order, e.g. 1).
+     */
+    public function primaryImage(): HasOne
+    {
+        return $this->hasOne(EventImg::class)
+            ->orderBy('sort_order', 'asc');
+    }
+>>>>>>> 6d26a72 (feat: event image management, recommendations, admin image UI, and EventDetailPage enhancements)
     public function ticketTypes(): HasMany
     {
         return $this->hasMany(TicketType::class, 'event_id');

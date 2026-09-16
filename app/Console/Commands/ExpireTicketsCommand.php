@@ -10,7 +10,11 @@ class ExpireTicketsCommand extends Command
     protected $signature = 'tickets:expire';
 
     protected $description =
+<<<<<<< HEAD
     'Expire active tickets when their event has ended';
+=======
+        'Expire active tickets when their event has ended';
+>>>>>>> 6d26a72 (feat: event image management, recommendations, admin image UI, and EventDetailPage enhancements)
 
     public function handle(
         TicketExpirationService $ticketExpirationService

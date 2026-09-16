@@ -279,6 +279,89 @@
           No tickets available for this event.
         </div>
       </div>
+
+      <!-- You Might Also Like -->
+      <section
+        v-if="recommendations.length > 0"
+        class="rounded-2xl bg-[#0b0f19] p-6 md:p-8 border border-white/5"
+      >
+        <div class="flex items-center justify-between mb-5">
+          <div class="flex items-center gap-3">
+            <span class="h-6 w-1.5 bg-green-500 rounded-full"></span>
+            <h2 class="text-xl md:text-2xl font-bold text-white">You Might Also Like</h2>
+          </div>
+          <div class="flex gap-2">
+            <button
+              @click="scrollRecs(-1)"
+              class="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              aria-label="Previous recommendations"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              @click="scrollRecs(1)"
+              class="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              aria-label="Next recommendations"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div
+          ref="recScroller"
+          class="flex gap-4 overflow-x-auto pb-2 snap-x scroll-smooth"
+        >
+          <router-link
+            v-for="rec in recommendations"
+            :key="rec.id"
+            :to="`/events/${rec.id}`"
+            class="group w-40 md:w-44 flex-shrink-0 snap-start"
+          >
+            <div
+              class="relative aspect-[2/3] rounded-xl overflow-hidden bg-gray-800 border border-white/10 group-hover:border-green-500/60 transition-colors"
+            >
+              <img
+                v-if="rec.primary_image"
+                :src="imageUrl(rec.primary_image.image)"
+                :alt="rec.title"
+                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                loading="lazy"
+              />
+              <div
+                v-else
+                class="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900"
+              >
+                <svg class="w-10 h-10 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                </svg>
+              </div>
+              <div
+                class="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium"
+              >
+                {{ formatShortDate(rec.start_date) }}
+              </div>
+              <div
+                v-if="rec.primary_image?.is_primary"
+                class="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-green-600 text-white text-[10px] font-semibold"
+              >
+                Poster
+              </div>
+              <div class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 to-transparent"></div>
+              <div class="absolute bottom-2 left-2 right-2">
+                <p class="text-white text-sm font-semibold line-clamp-2 leading-snug">{{ rec.title }}</p>
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-gray-400 truncate">
+              {{ rec.venue?.city || rec.venue?.name || 'No venue' }}
+            </p>
+          </router-link>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -303,6 +386,8 @@ const authUser = ref(null);
 const lightboxIndex = ref(-1);
 
 const eventId = computed(() => props.eventId ?? route.params.id);
+const recommendations = ref([]);
+const recScroller = ref(null);
 
 const sortedImages = computed(() => {
   if (!event.value?.images) return [];
@@ -341,6 +426,27 @@ function formatDate(dateStr) {
     month: 'long',
     day: 'numeric',
   });
+}
+
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+async function fetchRecommendations() {
+  try {
+    const response = await fetch(`${props.apiUrl}/events/${eventId.value}/recommendations?limit=10`);
+    if (!response.ok) return;
+    const data = await response.json();
+    recommendations.value = data.data || [];
+  } catch { /* ignore */ }
+}
+
+function scrollRecs(dir) {
+  if (recScroller.value) {
+    recScroller.value.scrollBy({ left: dir * 280, behavior: 'smooth' });
+  }
 }
 
 async function fetchEvent() {
@@ -438,7 +544,7 @@ function onKeydown(e) {
 }
 
 onMounted(async () => {
-  await Promise.all([fetchEvent(), loadAuthUser()]);
+  await Promise.all([fetchEvent(), loadAuthUser(), fetchRecommendations()]);
   if (event.value) {
     await checkFavorite();
   }

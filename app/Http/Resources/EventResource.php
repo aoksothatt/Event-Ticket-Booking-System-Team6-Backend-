@@ -25,7 +25,10 @@ class EventResource extends JsonResource
             'category' => $this->whenLoaded('category', fn () => CategoryResource::make($this->category)),
             'organizer' => $this->whenLoaded('organizer', fn () => OrganizerResource::make($this->organizer)),
             'ticket_types' => TicketTypeResource::collection($this->whenLoaded('ticketTypes')),
-            'images' => $this->whenLoaded('images'),
+            'images' => EventImgResource::collection($this->whenLoaded('images')),
+            'primary_image' => $this->whenLoaded('primaryImage', fn () => $this->primaryImage
+                ? EventImgResource::make($this->primaryImage)
+                : null),
             'created_at' => $this->created_at,
         ];
     }

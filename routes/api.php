@@ -86,6 +86,7 @@ Route::get('/events/category/{categoryId}', [EventsController::class, 'byCategor
 Route::get('/events/slug/{slug}', [EventsController::class, 'showBySlug']);
 Route::get('/events/{event}/recommendations', [EventsController::class, 'recommendations']);
 Route::get('/events/{id}', [EventsController::class, 'show']);
+Route::get('/events/{event}/recommendations', [EventsController::class, 'recommendations']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 Route::get('/categories/{id}', [CategoriesController::class, 'show']);
 Route::get('/ticket-types', [TicketTypeController::class, 'index']);
@@ -183,6 +184,8 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::post('/event-images', [EventImgController::class, 'store']);
     Route::match(['put', 'patch'], '/event-images/{eventImg}', [EventImgController::class, 'update']);
     Route::delete('/event-images/{eventImg}', [EventImgController::class, 'destroy']);
+    Route::post('/event-images/reorder', [EventImgController::class, 'reorder']);
+    Route::post('/event-images/{eventImg}/set-primary', [EventImgController::class, 'setPrimary']);
 });
 
 /* ----- Legacy admin CRUD aliases (frontend calls these without the /admin prefix) ----- */
@@ -232,10 +235,12 @@ Route::middleware(['auth:api', 'role:organizer,admin'])->prefix('organizer')->gr
 
     Route::get('/bookings', [BookingController::class, 'index']);
 
-    // Event image management.
+    // Event image management (organizer).
     Route::post('/event-images', [EventImgController::class, 'store']);
     Route::match(['put', 'patch'], '/event-images/{eventImg}', [EventImgController::class, 'update']);
     Route::delete('/event-images/{eventImg}', [EventImgController::class, 'destroy']);
+    Route::post('/event-images/reorder', [EventImgController::class, 'reorder']);
+    Route::post('/event-images/{eventImg}/set-primary', [EventImgController::class, 'setPrimary']);
 });
 
 /* ----- Legacy organizer routes (kept for frontend compatibility) ----- */

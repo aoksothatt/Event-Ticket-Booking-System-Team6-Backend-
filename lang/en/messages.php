@@ -19,6 +19,8 @@ return [
     'event_created' => 'Event created successfully.',
     'event_deleted' => 'Event deleted successfully.',
     'event_image_deleted' => 'Event image deleted successfully.',
+    'event_image_primary' => 'Image set as the primary poster.',
+    'event_images_reordered' => 'Image order updated successfully.',
     'event_image_updated' => 'Event image updated successfully.',
     'event_image_uploaded' => 'Event image uploaded successfully.',
     'event_removed_trending' => 'Event removed from trending.',
