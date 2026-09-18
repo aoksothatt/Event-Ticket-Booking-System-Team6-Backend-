@@ -5,47 +5,166 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage;
 
 class EventsController extends Controller
 {
-    // get all events with search, filter, and pagination
+    /**
+     * Relations always eager-loaded for the Vue homepage and event details.
+     */
+    private const HOMEPAGE_RELATIONS = [
+        'organizer',
+        'category',
+        'venue',
+        'images',
+        'ticketTypes',
+    ];
+
+    /**
+     * All events with search, filters, sorting, and pagination.
+     *
+     * Query params (all optional):
+     *   search      – title/description text search (case-insensitive)
+     *   category_id – filter by category
+     *   status      – filter by status (draft/published/cancelled)
+     *   is_trending – filter trending events (1/0)
+     *   sort_by     – start_date | start_time | title | created_at (default: created_at)
+     *   order       – asc | desc (default: desc)
+     *   per_page    – items per page (default: 10)
+     */
     public function index(Request $request)
     {
-        $events = Event::with(['venue', 'category', 'organizer', 'images', 'ticketTypes'])
-            ->when($request->search, function ($query, $search) {
-                $query->where('title', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
+        $request->validate([
+            'category_id' => 'sometimes|integer|exists:categories,id',
+            'status' => 'sometimes|in:draft,published,cancelled',
+            'is_trending' => 'sometimes|boolean',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+            'sort_by' => 'sometimes|in:start_date,start_time,title,created_at',
+            'order' => 'sometimes|in:asc,desc',
+        ]);
+
+        $sortBy = $request->get('sort_by', 'created_at');
+        $order = $request->get('order', 'desc') === 'asc' ? 'asc' : 'desc';
+
+        $events = Event::with(self::HOMEPAGE_RELATIONS)
+            ->when($request->filled('search'), function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('title', 'ilike', "%{$search}%")
+                        ->orWhere('description', 'ilike', "%{$search}%");
+                });
             })
-            ->when($request->category_id, function ($query, $categoryId) {
-                $query->where('category_id', $categoryId);
+            ->when($request->filled('category_id'), function ($query) use ($request) {
+                $query->where('category_id', (int) $request->query('category_id'));
             })
-            ->latest()
-            ->paginate($request->get('per_page', 10));
+            ->when($request->filled('status'), function ($query) use ($request) {
+                $query->where('status', (string) $request->query('status'));
+            })
+            ->when($request->filled('is_trending'), function ($query) use ($request) {
+                $query->where('is_trending', $request->boolean('is_trending'));
+            })
+            ->orderBy($sortBy, $order)
+            ->paginate((int) $request->get('per_page', 10));
 
         return response()->json([
             'success' => true,
+            'message' => 'Events retrieved successfully',
             'data' => $events,
         ]);
     }
 
     /**
-     * Trending events for the customer homepage.
-     * Driven by the admin's manual `is_trending` selection — only published,
-     * still-active events are returned so drafts and past events never leak in.
+     * Upcoming events for the homepage banner: published events that the
+     * admin manually flagged with `is_upcoming = true`. No automatic date
+     * logic — the admin decides which events appear in the banner.
+     */
+    public function upcoming(Request $request)
+    {
+        $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
+        $events = Event::with(self::HOMEPAGE_RELATIONS)
+            ->upcomingFlagged()
+            ->orderBy('start_date')
+            ->orderBy('start_time')
+            ->paginate((int) $request->get('per_page', 10));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Upcoming events retrieved successfully',
+            'data' => $events,
+        ]);
+    }
+
+    /**
+     * Trending events for the homepage. Driven by the admin's manual
+     * `is_trending` selection — only published, still-active events are
+     * returned so drafts and past events never leak in.
      */
     public function trending()
     {
-        $events = Event::with(['venue', 'category', 'organizer', 'images', 'ticketTypes'])
-            ->where('is_trending', true)
-            ->where('status', 'published')
-            ->whereDate('end_date', '>=', now()->toDateString())
-            ->latest()
+        $events = Event::with(self::HOMEPAGE_RELATIONS)
+            ->trending()
+            ->where('end_date', '>=', today()->toDateString())
+            ->orderBy('start_date')
+            ->orderBy('start_time')
             ->get();
 
         return response()->json([
             'success' => true,
+            'message' => 'Trending events retrieved successfully',
             'data' => $events,
+        ]);
+    }
+
+    /**
+     * Published events for a single category (e.g. Football) on the homepage.
+     */
+    public function byCategory(Request $request, int $categoryId)
+    {
+        $request->validate([
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
+        $events = Event::with(self::HOMEPAGE_RELATIONS)
+            ->published()
+            ->where('category_id', $categoryId)
+            ->orderBy('start_date')
+            ->orderBy('start_time')
+            ->paginate((int) $request->get('per_page', 10));
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Events for category retrieved successfully',
+            'data' => $events,
+        ]);
+    }
+
+    // Show event details
+    public function show($id)
+    {
+        $event = Event::with(self::HOMEPAGE_RELATIONS)
+            ->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Event retrieved successfully',
+            'data' => $event,
+        ]);
+    }
+
+    /**
+     * Show event details by URL slug (e.g. /api/events/slug/cambodia-vs-thailand).
+     */
+    public function showBySlug(string $slug)
+    {
+        $event = Event::with(self::HOMEPAGE_RELATIONS)
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Event retrieved successfully',
+            'data' => $event,
         ]);
     }
 
@@ -69,14 +188,37 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'message' => $message,
-            'data' => $event->fresh(['venue', 'category', 'organizer', 'images', 'ticketTypes']),
+            'data' => $event->fresh(self::HOMEPAGE_RELATIONS),
+        ]);
+    }
+
+    /**
+     * Manually set an event's upcoming status (admin-only).
+     */
+    public function setUpcoming(Request $request, $id)
+    {
+        $event = Event::findOrFail($id);
+
+        $validated = $request->validate([
+            'is_upcoming' => 'required|boolean',
+        ]);
+
+        $event->update([
+            'is_upcoming' => $validated['is_upcoming'],
+        ]);
+
+        $message = $event->is_upcoming ? __('messages.event_added_upcoming') : __('messages.event_removed_upcoming');
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => $event->fresh(self::HOMEPAGE_RELATIONS),
         ]);
     }
 
     // Create new event
     public function store(Request $request)
     {
-
         $validated = $request->validate([
             'organizer_id' => 'required|exists:organizers,id',
             'category_id' => 'required|exists:categories,id',
@@ -102,7 +244,7 @@ class EventsController extends Controller
         if (empty($validated['slug'])) {
             $validated['slug'] = Str::slug($validated['title']);
             if (empty($validated['slug'])) {
-                $validated['slug'] = 'event-' . now()->timestamp;
+                $validated['slug'] = 'event-'.now()->timestamp;
             }
         }
 
@@ -112,7 +254,7 @@ class EventsController extends Controller
         // Store the uploaded banner image instead of its temp path
         if ($request->hasFile('banner')) {
             $validated['banner'] = $request->file('banner')->store('events', 'public');
-        } elseif ($request->exists('banner') && !$request->hasFile('banner')) {
+        } elseif ($request->exists('banner') && ! $request->hasFile('banner')) {
             unset($validated['banner']);
         }
 
@@ -126,17 +268,6 @@ class EventsController extends Controller
         ], 201);
     }
 
-    // Show event details
-    public function show($id)
-    {
-        $event = Event::findOrFail($id);
-
-        return response()->json([
-            'success' => true,
-            'data' => $event->load(['venue', 'category', 'ticketTypes', 'images', 'organizer']),
-        ]);
-    }
-
     // Update event details
     public function update(Request $request, $id)
     {
@@ -147,7 +278,7 @@ class EventsController extends Controller
             'venue_id' => 'sometimes|exists:venues,id',
             'category_id' => 'sometimes|exists:categories,id',
             'title' => 'sometimes|string|max:255',
-            'slug' => 'nullable|string|max:255|unique:events,slug,' . $id,
+            'slug' => 'nullable|string|max:255|unique:events,slug,'.$id,
             'description' => 'nullable|string',
             'start_date' => 'sometimes|date',
             'end_date' => 'sometimes|date|after_or_equal:start_date',
@@ -162,14 +293,14 @@ class EventsController extends Controller
         if (empty($validated['slug'])) {
             $validated['slug'] = Str::slug($validated['title'] ?? $event->title);
             if (empty($validated['slug'])) {
-                $validated['slug'] = 'event-' . now()->timestamp;
+                $validated['slug'] = 'event-'.now()->timestamp;
             }
         }
 
         // Store the uploaded banner image instead of its temp path
         if ($request->hasFile('banner')) {
             $validated['banner'] = $request->file('banner')->store('events', 'public');
-        } elseif ($request->exists('banner') && !$request->hasFile('banner')) {
+        } elseif ($request->exists('banner') && ! $request->hasFile('banner')) {
             unset($validated['banner']);
         }
 

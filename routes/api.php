@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 Route::get('/language/{locale}', function (string $locale) {
-    if (!in_array($locale, ['en', 'km'])) {
+    if (! in_array($locale, ['en', 'km'])) {
         return response()->json([
             'success' => false,
             'message' => __('messages.unsupported_language'),
@@ -79,7 +79,10 @@ Route::get('/organizers/{id}', [OrganizerController::class, 'show']);
 Route::get('/venues', [VenuesController::class, 'index']);
 Route::get('/venues/{id}', [VenuesController::class, 'show']);
 Route::get('/events', [EventsController::class, 'index']);
+Route::get('/events/upcoming', [EventsController::class, 'upcoming']);
 Route::get('/events/trending', [EventsController::class, 'trending']);
+Route::get('/events/category/{categoryId}', [EventsController::class, 'byCategory']);
+Route::get('/events/slug/{slug}', [EventsController::class, 'showBySlug']);
 Route::get('/events/{id}', [EventsController::class, 'show']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 Route::get('/categories/{id}', [CategoriesController::class, 'show']);
@@ -103,7 +106,7 @@ Route::post('/payments/webhook', [PaymentController::class, 'webhook']);
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth:api'])->group(function () {
-    Route::get('/user', static fn(Request $request) => response()->json([
+    Route::get('/user', static fn (Request $request) => response()->json([
         'success' => true,
         'data' => $request->user(),
     ]));
@@ -155,6 +158,7 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy']);
 
     Route::patch('/events/{id}/trending', [EventsController::class, 'setTrending']);
+    Route::patch('/events/{id}/upcoming', [EventsController::class, 'setUpcoming']);
 
     // Organizer management helpers for admins.
     Route::post('/organizers', [OrganizerController::class, 'store']);
