@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\PaymentResource;
 use App\Models\Payment;
+use App\Models\Setting;
 use App\Repositories\PaymentRepository;
 use App\Services\Bakong\BakongException;
 use App\Services\Bakong\PaymentVerificationService;
@@ -82,7 +83,13 @@ class PaymentController extends Controller
         }
 
         // If payment is pending and unexpired, check with Bakong automatically
-        if ($record->status === Payment::STATUS_PENDING && ! $record->isExpired() && $record->bakong_md5) {
+        // (disabled via Settings → Payment → Automatic Payment Verification).
+        if (
+            Setting::value('payment.automatic_verification', true)
+            && $record->status === Payment::STATUS_PENDING
+            && ! $record->isExpired()
+            && $record->bakong_md5
+        ) {
             try {
                 $this->verifier->verify($record);
                 $record->refresh();

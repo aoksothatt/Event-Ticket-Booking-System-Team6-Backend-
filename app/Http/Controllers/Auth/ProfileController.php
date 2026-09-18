@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -37,6 +38,16 @@ class ProfileController extends Controller
         public function update(Request $request)
         {
             $user = $request->user();
+
+            // Platform-level switch: when profile editing is disabled customers
+            // cannot modify their personal profile (password change and avatar
+            // upload remain available).
+            if (! Setting::value('user.profile_editing', true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Profile editing is currently disabled on this platform.',
+                ], 403);
+            }
 
             $validated = $request->validate([
                 'name' => ['sometimes', 'string', 'max:255'],

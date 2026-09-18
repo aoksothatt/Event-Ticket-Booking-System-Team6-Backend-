@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Event;
+use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\TicketLog;
 use Carbon\Carbon;
@@ -27,6 +28,14 @@ class TicketExpirationService
      */
     public function expireTickets(?int $userId = null): int
     {
+        // event.auto_handle_past (default on) governs whether tickets are
+        // auto-expired once their event has ended. Turning it off keeps
+        // tickets in their current state and stops both the scheduled
+        // `tickets:expire` command and the on-demand customer-ticket calls.
+        if (! Setting::value('event.auto_handle_past', true)) {
+            return 0;
+        }
+
         $now = now('UTC');
 
         // Compute the real event-end timestamp (end_date + end_time) so the

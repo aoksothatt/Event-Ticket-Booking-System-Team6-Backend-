@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\BookingItem;
+use App\Models\Event;
+use App\Models\Setting;
 use App\Models\TicketType;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -146,8 +149,9 @@ class BookingController extends Controller
         ]);
     }
 
-    public function update(Request $request ,$id){
-        $booking = Booking::findOrFail($id);
+    public function update(Request $request, $id){
+        $booking = Booking::with('event')->findOrFail($id);
+        $user = $request->user();
 
         $validated = $request->validate([
             'status' => 'required|string|max:30',
@@ -155,6 +159,53 @@ class BookingController extends Controller
 
         $oldStatus = $booking->status;
         $newStatus = $validated['status'];
+
+        // Non-admins may only cancel bookings (admins keep full status
+        // control). This also prevents a customer flipping arbitrary statuses.
+        if ($user->role !== 'admin' && $newStatus !== 'cancelled') {
+            return response()->json([
+                'success' => false,
+                'message' => __('messages.forbidden'),
+            ], 403);
+        }
+
+        // Ownership checks: customers only their own bookings, organizers only
+        // bookings for events they own.
+        if ($user->role === 'customer' && (int) $booking->user_id !== (int) $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => __('messages.forbidden'),
+            ], 403);
+        }
+
+        if ($user->role === 'organizer' && $booking->event !== null
+            && (int) $booking->event->organizer_id !== (int) $user->organizerProfile?->id) {
+            return response()->json([
+                'success' => false,
+                'message' => __('messages.forbidden'),
+            ], 403);
+        }
+
+        // Cancellation is governed by the platform settings: a global switch
+        // (booking.cancellation_enabled) and a window measured in hours before
+        // the event starts (booking.cancellation_deadline).
+        if ($newStatus === 'cancelled' && $user->role !== 'admin') {
+            if (! Setting::value('booking.cancellation_enabled', true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking cancellation is currently disabled on this platform.',
+                ], 403);
+            }
+
+            $deadlineHours = (int) Setting::value('booking.cancellation_deadline', 24);
+            $start = $booking->event ? $this->eventStartTimestamp($booking->event) : null;
+            if ($start !== null && $deadlineHours > 0 && now()->gte($start->subHours($deadlineHours))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cancellations close {$deadlineHours} hour(s) before the event starts.",
+                ], 422);
+            }
+        }
 
         DB::transaction(function () use ($booking, $oldStatus, $newStatus, $validated) {
             // When a booking moves away from pending/confirmed to a cancelled
@@ -176,6 +227,20 @@ class BookingController extends Controller
             'message' => __('messages.booking_updated'),
             'data' => $booking->fresh(['items.ticketType'])
         ]);
+    }
+
+    /**
+     * Build a Carbon timestamp from an event's start_date + start_time, or null
+     * when the event has no scheduled start time (deadline check then skipped).
+     */
+    protected function eventStartTimestamp(Event $event): ?Carbon
+    {
+        if (! $event->start_date || ! $event->start_time) {
+            return null;
+        }
+
+        return Carbon::parse($event->start_date->toDateString())
+            ->setTimeFromTimeString((string) $event->start_time);
     }
 
     public function destroy($id){

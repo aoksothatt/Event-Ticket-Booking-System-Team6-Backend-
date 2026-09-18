@@ -35,6 +35,7 @@ return [
             'view_dashboard',
             'view_reports',
             'view_payments',
+            'manage_settings',
         ],
 
         Role::ORGANIZER->value => [

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -219,6 +220,18 @@ class EventsController extends Controller
     // Create new event
     public function store(Request $request)
     {
+        $user = $request->user();
+
+        // Organizer submissions are governed by the platform settings. Admins
+        // (the super role) always retain the ability to create events.
+        if (! $user->hasRole('admin')
+            && ! Setting::value('event.organizer_create_enabled', true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Organizers are not currently allowed to create events on this platform.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'organizer_id' => 'required|exists:organizers,id',
             'category_id' => 'required|exists:categories,id',
@@ -239,6 +252,13 @@ class EventsController extends Controller
 
             'status' => 'nullable|in:draft,published,cancelled',
         ]);
+
+        // When administrator approval is required, organizer-created events are
+        // always saved as drafts and only an admin may publish them later.
+        if (! $user->hasRole('admin')
+            && Setting::value('event.admin_approval_required', false)) {
+            $validated['status'] = 'draft';
+        }
 
         // Auto-generate slug from title if not provided
         if (empty($validated['slug'])) {
@@ -272,6 +292,41 @@ class EventsController extends Controller
     public function update(Request $request, $id)
     {
         $event = Event::findOrFail($id);
+        $user = $request->user();
+
+        // Publishing is an admin action when approval is required: without it
+        // organizers could bypass the approval flow by creating a draft and
+        // immediately publishing it themselves.
+        if (! $user->hasRole('admin')
+            && Setting::value('event.admin_approval_required', false)
+            && $request->input('status') === 'published') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Events must be approved by an administrator before publishing.',
+            ], 403);
+        }
+
+        // Once an event is published, editing may be locked down so
+        // organizers cannot silently change details customers already bought
+        // against. Admins always retain the ability to edit.
+        if (! $user->hasRole('admin')
+            && $event->status === 'published'
+            && ! Setting::value('event.allow_edit_after_publish', true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Published events can no longer be edited on this platform.',
+            ], 403);
+        }
+
+        // Cancellation of a published event is a separate platform-level switch.
+        if (! $user->hasRole('admin')
+            && $request->input('status') === 'cancelled'
+            && ! Setting::value('event.allow_cancellation', true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Event cancellation is currently disabled on this platform.',
+            ], 403);
+        }
 
         $validated = $request->validate([
             'organizer_id' => 'sometimes|exists:organizers,id',

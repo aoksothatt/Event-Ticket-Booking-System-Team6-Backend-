@@ -20,6 +20,7 @@ use App\Http\Controllers\OrganizerController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PaymentsController;
 use App\Http\Controllers\ReviewsController;
+use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\Staff\CheckInController as StaffCheckInController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
@@ -92,6 +93,9 @@ Route::get('/reviews', [ReviewsController::class, 'index']);
 Route::get('/reviews/{id}', [ReviewsController::class, 'show']);
 Route::post('/payments/webhook', [PaymentController::class, 'webhook']);
 
+/* ----- Public platform settings (branding / booking constraints / maintenance) ----- */
+Route::get('/settings/public', [SettingsController::class, 'publicSettings']);
+
 /* ----- Event images ----- */
 Route::get('/event-images', [EventImgController::class, 'index']);
 Route::get('/event-images/{eventImg}', [EventImgController::class, 'show']);
@@ -144,6 +148,11 @@ Route::middleware(['auth:api'])->group(function () {
 */
 Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
+
+    // Platform settings (read/update). Values are validated against the
+    // catalog in config/settings.php and persisted to the `settings` table.
+    Route::get('/settings', [SettingsController::class, 'index']);
+    Route::match(['put', 'patch'], '/settings', [SettingsController::class, 'update']);
 
     Route::apiResource('users', UsersController::class);
 
