@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Setting;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CreatePaymentRequest extends FormRequest
@@ -36,16 +37,21 @@ class CreatePaymentRequest extends FormRequest
      */
     public function rules(): array
     {
+        // Administrable min/max tickets per order — defaults match the
+        // previous hard-coded 1 and 10 so behaviour is unchanged by default.
+        $minTickets = (int) Setting::value('booking.min_tickets', 1);
+        $maxTickets = (int) Setting::value('booking.max_tickets', 10);
+
         return [
             'event_id' => 'required|integer|exists:events,id',
 
             'items' => 'sometimes|array|min:1',
             'items.*.ticket_type_id' => 'required|integer|distinct|exists:ticket_types,id',
-            'items.*.quantity' => 'required|integer|min:1|max:10',
+            'items.*.quantity' => "required|integer|min:{$minTickets}|max:{$maxTickets}",
 
             // Legacy single-item shape.
             'ticket_type_id' => 'sometimes|integer|exists:ticket_types,id',
-            'quantity' => 'sometimes|integer|min:1|max:10',
+            'quantity' => "sometimes|integer|min:{$minTickets}|max:{$maxTickets}",
 
             // Optional: reuse an existing pending booking (retry a payment).
             'booking_id' => 'sometimes|nullable|integer|exists:Booking,id',

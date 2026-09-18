@@ -5,6 +5,7 @@ namespace App\Services\Bakong;
 use App\Mail\TicketIssued;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\Setting;
 use App\Repositories\PaymentRepository;
 use App\Services\TicketService;
 use Illuminate\Support\Facades\DB;
@@ -290,6 +291,14 @@ class PaymentVerificationService
      */
     protected function dispatchTicketEmail(Booking $booking): void
     {
+        // Honor the "Email Notifications" and per-trigger "Tickets Issued"
+        // settings (both default on preserves the existing behaviour).
+        // Failures are logged but never fatal.
+        if (! Setting::value('notification.email_enabled', true)
+            || ! Setting::value('notification.customer_ticket_issued', true)) {
+            return;
+        }
+
         try {
             $tickets = $booking->tickets()->with('ticketType')->get();
 

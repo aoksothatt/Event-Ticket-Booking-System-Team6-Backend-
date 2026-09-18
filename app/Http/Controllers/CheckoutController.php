@@ -7,6 +7,7 @@ use App\Http\Resources\PaymentResource;
 use App\Models\Booking;
 use App\Models\Event;
 use App\Models\Payment;
+use App\Models\Setting;
 use App\Models\TicketType;
 use App\Repositories\PaymentRepository;
 use App\Services\Bakong\BakongException;
@@ -77,6 +78,40 @@ class CheckoutController extends Controller
     {
         $validated = $request->validated();
         $user = $request->user();
+
+        // Platform-level switches (defaults preserve existing behaviour).
+        if (! Setting::value('booking.enabled', true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bookings are currently disabled on this platform.',
+            ], 403);
+        }
+
+        if (! Setting::value('payment.enabled', true) || ! Setting::value('payment.bakong_enabled', true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Online payment is currently disabled on this platform.',
+            ], 403);
+        }
+
+        // Buyer prerequisites (booking.require_email_verification /
+        // booking.require_phone). Both default OFF so existing customers are
+        // never blocked until an administrator explicitly enables them.
+        if (Setting::value('booking.require_email_verification', false)
+            && $user->email_verified_at === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your email address must be verified before you can book tickets.',
+            ], 403);
+        }
+
+        if (Setting::value('booking.require_phone', false)
+            && trim((string) $user->phone) === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'A phone number is required on your profile before you can book tickets.',
+            ], 403);
+        }
 
         $bookingId = isset($validated['booking_id']) ? (int) $validated['booking_id'] : null;
         $items = $bookingId === null ? $request->items() : [];
@@ -396,17 +431,36 @@ class CheckoutController extends Controller
     {
         $reference = 'PAY-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
 
+        // Payment currency is administrable via Settings (payment.currency).
+        // Config is overridden at request scope so the locally generated KHQR
+        // and the persisted payment record share the same currency.
+        $currency = (string) Setting::value('payment.currency', (string) config('bakong.currency', 'USD'));
+        config()->set('bakong.currency', $currency);
+
+        // Payment timeout is administrable via Settings. When left unset it
+        // falls back to the existing Bakong value so current behaviour is
+        // preserved. When booking.auto_expire is enabled the booking
+        // expiration window (booking.expiration_minutes) governs the QR;
+        // otherwise the payment timeout is used. Config is overridden at
+        // request scope so the locally generated KHQR and the payment record
+        // share the same deadline.
+        $baseTimeout = (int) Setting::value('payment.timeout', (int) config('bakong.qr_expiration_minutes', 1));
+        $timeout = Setting::value('booking.auto_expire', true)
+            ? (int) Setting::value('booking.expiration_minutes', $baseTimeout)
+            : $baseTimeout;
+        config()->set('bakong.qr_expiration_minutes', max(1, $timeout));
+
         $payment = $this->payments->create([
             'booking_id' => $booking->id,
             'provider' => Payment::PROVIDER_BAKONG,
             'payment_method' => 'bakong_khqr',
             'transaction_reference' => $reference,
             'transaction_id' => $reference,
-            'currency' => config('bakong.currency', 'USD'),
+            'currency' => $currency,
             'amount' => $amount,
             'status' => Payment::STATUS_PENDING,
             'payment_status' => 'pending',
-            'expires_at' => now()->addMinutes((int) config('bakong.qr_expiration_minutes', 1)),
+            'expires_at' => now()->addMinutes(max(1, $timeout)),
         ]);
 
         // Generate the KHQR LOCALLY with the PHP KHQR SDK (no server-side

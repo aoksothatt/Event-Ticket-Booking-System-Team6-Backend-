@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -12,6 +13,12 @@ class GoogleAuthController extends Controller
 {
     public function redirect()
     {
+        // Platform-level switch: when Google login is disabled the browser is
+        // bounced straight back to the SPA with an error flag.
+        if (! Setting::value('user.google_login', true)) {
+            return redirect()->away($this->callbackUrl(['error' => 'google_login_disabled']));
+        }
+
         return Socialite::driver('google')
             ->stateless()
             ->redirect();
@@ -29,14 +36,22 @@ class GoogleAuthController extends Controller
                 ->first();
 
             if (!$user) {
+                // Signing in via Google also creates a brand-new account, so it
+                // respects the same registration switch as the local register
+                // flow. Google-verified emails count as verified immediately.
+                if (! Setting::value('user.registration_enabled', true)) {
+                    return redirect()->away($this->callbackUrl(['error' => 'registration_disabled']));
+                }
+
                 $user = User::create([
                     'name' => $googleUser->getName(),
                     'email' => $googleUser->getEmail(),
                     'google_id' => $googleUser->getId(),
                     'avatar' => $googleUser->getAvatar(),
                     'password' => Hash::make(Str::random(32)),
-                    'role' => 'customer',
+                    'role' => Setting::value('user.default_role', 'customer'),
                     'status' => 'active',
+                    'email_verified_at' => now(),
                 ]);
             } else {
                 if (!$user->google_id) {
