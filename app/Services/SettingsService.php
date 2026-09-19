@@ -109,38 +109,19 @@ class SettingsService
      */
     public function publicValues(): array
     {
+        // Mirror of what the SPA actually consumes (branding, auth/registration
+        // gates, maintenance state). Booking/payment/event enforcement stays
+        // server-side, so those keys are intentionally not exposed here.
         $keys = [
             'general.platform_name',
             'general.platform_description',
-            'general.support_email',
-            'general.support_phone',
-            'general.default_currency',
-            'general.timezone',
-            'general.language',
-            'appearance.logo',
             'appearance.favicon',
             'appearance.primary_color',
-            'appearance.secondary_color',
             'appearance.theme',
-            'appearance.tagline',
             'appearance.footer_copyright',
-            'booking.enabled',
-            'booking.min_tickets',
-            'booking.max_tickets',
-            'booking.cancellation_enabled',
-            'booking.cancellation_deadline',
-            'booking.require_phone',
-            'booking.require_email_verification',
-            'payment.enabled',
-            'payment.bakong_enabled',
-            'payment.currency',
             'user.registration_enabled',
             'user.google_login',
-            'event.allow_cancellation',
-            'event.admin_approval_required',
             'ticket.qr_enabled',
-            'ticket.allow_download',
-            'ticket.allow_printing',
             'system.maintenance_mode',
             'system.maintenance_message',
         ];

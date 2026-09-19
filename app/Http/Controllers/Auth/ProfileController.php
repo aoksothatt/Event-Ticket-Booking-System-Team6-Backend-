@@ -41,8 +41,8 @@ class ProfileController extends Controller
 
             // Platform-level switch: when profile editing is disabled customers
             // cannot modify their personal profile (password change and avatar
-            // upload remain available).
-            if (! Setting::value('user.profile_editing', true)) {
+            // upload remain available). Admins can always edit their profile.
+            if (! $user->hasRole('admin') && ! Setting::value('user.profile_editing', true)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Profile editing is currently disabled on this platform.',
@@ -58,12 +58,14 @@ class ProfileController extends Controller
                 'address' => ['nullable', 'string', 'max:255'],
             ]);
 
+            $originalEmail = $user->email;
+
             // Update columns that live on the `users` table.
             $userData = array_intersect_key($validated, array_flip(['name', 'email', 'phone']));
             $user->update($userData);
 
             // If the email changed, the new address must be verified again.
-            if (isset($userData['email']) && $userData['email'] !== $user->getOriginal('email')) {
+            if (isset($userData['email']) && $userData['email'] !== $originalEmail) {
                 $user->forceFill(['email_verified_at' => null])->save();
             }
 
@@ -81,10 +83,15 @@ class ProfileController extends Controller
                 $profile->save();
             }
 
+            $freshUser = $user->fresh()->load('profile');
+
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully.',
-                'data' => $user->fresh()->load('profile'),
+                'data' => [
+                    'user' => $freshUser,
+                    'profile' => $freshUser->profile,
+                ],
             ]);
         }
 

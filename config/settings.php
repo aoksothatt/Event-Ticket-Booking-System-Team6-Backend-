@@ -10,6 +10,13 @@
 | stored row resolves to the default defined here, so existing behaviour is
 | preserved until a setting is changed.
 |
+| Only settings backed by a real feature live here. The settings audit
+| removed every key consumed by neither backend nor frontend code (dead
+| support/currency/timezone/language fields, appearance logo/tagline/secondary
+| color, notification triggers with no mailer, ticket download/print/auto-mark
+| toggles). Unknown keys are ignored by SettingsService::update(), so any
+| leftover rows in the settings table are harmless and untouched.
+|
 | Each entry:
 |   'group'   - UI group this key belongs to.
 |   'type'    - scalar type used for casting ('string'|'boolean'|'integer'|'color').
@@ -42,67 +49,6 @@ return [
         'rules' => ['nullable', 'string', 'max:500'],
     ],
 
-    'general.support_email' => [
-        'group' => 'general',
-        'type' => 'string',
-        'label' => 'settings.general.supportEmail',
-        'desc' => 'settings.general.supportEmailDesc',
-        'default' => 'support@eventhub.com',
-        'rules' => ['nullable', 'string', 'email', 'max:255'],
-    ],
-
-    'general.support_phone' => [
-        'group' => 'general',
-        'type' => 'string',
-        'label' => 'settings.general.supportPhone',
-        'desc' => 'settings.general.supportPhoneDesc',
-        'default' => '',
-        'rules' => ['nullable', 'string', 'max:30'],
-    ],
-
-    'general.default_currency' => [
-        'group' => 'general',
-        'type' => 'string',
-        'label' => 'settings.general.defaultCurrency',
-        'desc' => 'settings.general.defaultCurrencyDesc',
-        'default' => 'USD',
-        'options' => ['USD', 'EUR', 'KHR', 'GBP'],
-        'rules' => ['required', 'string', 'in:USD,EUR,KHR,GBP'],
-    ],
-
-    'general.timezone' => [
-        'group' => 'general',
-        'type' => 'string',
-        'label' => 'settings.general.timezone',
-        'desc' => 'settings.general.timezoneDesc',
-        'default' => 'Asia/Phnom_Penh',
-        'options' => [
-            'UTC', 'Asia/Phnom_Penh', 'Asia/Bangkok', 'Asia/Singapore',
-            'Asia/Hong_Kong', 'Asia/Tokyo', 'Europe/London', 'Europe/Paris',
-            'America/New_York', 'America/Los_Angeles', 'Australia/Sydney',
-        ],
-        'rules' => ['required', 'string', 'max:100'],
-    ],
-
-    'general.language' => [
-        'group' => 'general',
-        'type' => 'string',
-        'label' => 'settings.general.language',
-        'desc' => 'settings.general.languageDesc',
-        'default' => 'en',
-        'options' => ['en', 'km'],
-        'rules' => ['required', 'string', 'in:en,km'],
-    ],
-
-    'appearance.logo' => [
-        'group' => 'appearance',
-        'type' => 'string',
-        'label' => 'settings.appearance.logo',
-        'desc' => 'settings.appearance.logoDesc',
-        'default' => '',
-        'rules' => ['nullable', 'string', 'max:255'],
-    ],
-
     'appearance.favicon' => [
         'group' => 'appearance',
         'type' => 'string',
@@ -121,15 +67,6 @@ return [
         'rules' => ['required', 'string', 'regex:/^#([0-9a-fA-F]{6})$/'],
     ],
 
-    'appearance.secondary_color' => [
-        'group' => 'appearance',
-        'type' => 'color',
-        'label' => 'settings.appearance.secondaryColor',
-        'desc' => 'settings.appearance.secondaryColorDesc',
-        'default' => '#0f172a',
-        'rules' => ['required', 'string', 'regex:/^#([0-9a-fA-F]{6})$/'],
-    ],
-
     'appearance.theme' => [
         'group' => 'appearance',
         'type' => 'string',
@@ -138,15 +75,6 @@ return [
         'default' => 'system',
         'options' => ['light', 'dark', 'system'],
         'rules' => ['required', 'string', 'in:light,dark,system'],
-    ],
-
-    'appearance.tagline' => [
-        'group' => 'appearance',
-        'type' => 'string',
-        'label' => 'settings.appearance.tagline',
-        'desc' => 'settings.appearance.taglineDesc',
-        'default' => 'Discover. Book. Experience.',
-        'rules' => ['nullable', 'string', 'max:200'],
     ],
 
     'appearance.footer_copyright' => [
@@ -298,82 +226,11 @@ return [
         'rules' => ['required', 'boolean'],
     ],
 
-    'notification.customer_booking_confirmation' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.customerBookingConfirmation',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.customer_payment_successful' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.customerPaymentSuccessful',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.customer_payment_failed' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.customerPaymentFailed',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
     'notification.customer_ticket_issued' => [
         'group' => 'notification',
         'type' => 'boolean',
         'label' => 'settings.notification.customerTicketIssued',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.customer_booking_cancelled' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.customerBookingCancelled',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.customer_event_reminder' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.customerEventReminder',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.organizer_new_booking' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.organizerNewBooking',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.organizer_payment_received' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.organizerPaymentReceived',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.organizer_event_approved' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.organizerEventApproved',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'notification.organizer_event_cancelled' => [
-        'group' => 'notification',
-        'type' => 'boolean',
-        'label' => 'settings.notification.organizerEventCancelled',
+        'desc' => 'settings.notification.customerTicketIssuedDesc',
         'default' => true,
         'rules' => ['required', 'boolean'],
     ],
@@ -411,15 +268,6 @@ return [
         'label' => 'settings.user.profileEditing',
         'desc' => 'settings.user.profileEditingDesc',
         'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'user.account_deletion' => [
-        'group' => 'user',
-        'type' => 'boolean',
-        'label' => 'settings.user.accountDeletion',
-        'desc' => 'settings.user.accountDeletionDesc',
-        'default' => false,
         'rules' => ['required', 'boolean'],
     ],
 
@@ -483,33 +331,6 @@ return [
         'type' => 'boolean',
         'label' => 'settings.ticket.qrEnabled',
         'desc' => 'settings.ticket.qrEnabledDesc',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'ticket.allow_download' => [
-        'group' => 'event',
-        'type' => 'boolean',
-        'label' => 'settings.ticket.allowDownload',
-        'desc' => 'settings.ticket.allowDownloadDesc',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'ticket.allow_printing' => [
-        'group' => 'event',
-        'type' => 'boolean',
-        'label' => 'settings.ticket.allowPrinting',
-        'desc' => 'settings.ticket.allowPrintingDesc',
-        'default' => true,
-        'rules' => ['required', 'boolean'],
-    ],
-
-    'ticket.auto_mark_used' => [
-        'group' => 'event',
-        'type' => 'boolean',
-        'label' => 'settings.ticket.autoMarkUsed',
-        'desc' => 'settings.ticket.autoMarkUsedDesc',
         'default' => true,
         'rules' => ['required', 'boolean'],
     ],
