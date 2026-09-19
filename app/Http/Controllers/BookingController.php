@@ -243,8 +243,19 @@ class BookingController extends Controller
             ->setTimeFromTimeString((string) $event->start_time);
     }
 
-    public function destroy($id){
+    public function destroy(Request $request, $id){
         $booking = Booking::findOrFail($id);
+
+        // Hard-deleting a booking cascades to its items, payments and issued
+        // tickets without restoring inventory, so only admins may do it.
+        // Customers/organizers cancel instead via update(status=cancelled),
+        // which releases the reserved tickets back to the ticket type.
+        if ($request->user('api')->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => __('messages.forbidden'),
+            ], 403);
+        }
 
         $booking-> delete();
 

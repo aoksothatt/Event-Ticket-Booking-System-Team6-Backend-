@@ -82,9 +82,17 @@ class ReviewsController extends Controller
 
     public function update(Request $request, $id)
     {
-        $review = Review::where('id', $id)
-            ->where('user_id', $request->user()->id)
-            ->firstOrFail();
+        $user = $request->user();
+
+        // Moderators (manage_reviews — admins are a super role) may update any
+        // review to publish/reject it; customers stay scoped to their own.
+        if ($user->hasPermission('manage_reviews')) {
+            $review = Review::findOrFail($id);
+        } else {
+            $review = Review::where('id', $id)
+                ->where('user_id', $user->id)
+                ->firstOrFail();
+        }
 
         $validated = $request->validate([
             'rating' => 'sometimes|integer|min:1|max:5',
@@ -103,10 +111,19 @@ class ReviewsController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        Review::where('id', $id)
-            ->where('user_id', $request->user()->id)
-            ->firstOrFail()
-            ->delete();
+        $user = $request->user();
+
+        // Moderators (manage_reviews — admins are a super role) may delete any
+        // review; customers stay scoped to their own.
+        if ($user->hasPermission('manage_reviews')) {
+            $review = Review::findOrFail($id);
+        } else {
+            $review = Review::where('id', $id)
+                ->where('user_id', $user->id)
+                ->firstOrFail();
+        }
+
+        $review->delete();
 
         return response()->json([
             'success' => true,

@@ -5,6 +5,18 @@
 
     RewriteEngine On
 
+    # Allow event banners / avatars up to the app's documented limit. The API
+    # validates `banner` and `avatar` rows with `max:5120` (5 MB), but XAMPP's
+    # global php.ini only allows 2 MB (`upload_max_filesize`). Any image larger
+    # than that is dropped by PHP itself and surfaces as a confusing HTTP 422
+    # "banner failed to upload". These per-directory overrides (only effective
+    # because mod_php + AllowOverride All are active) raise the caps to match
+    # the validation rules without touching the global configuration.
+    <IfModule mod_php8.c>
+        php_value upload_max_filesize 6M
+        php_value post_max_size 10M
+    </IfModule>
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

@@ -84,6 +84,7 @@ Route::get('/events/upcoming', [EventsController::class, 'upcoming']);
 Route::get('/events/trending', [EventsController::class, 'trending']);
 Route::get('/events/category/{categoryId}', [EventsController::class, 'byCategory']);
 Route::get('/events/slug/{slug}', [EventsController::class, 'showBySlug']);
+Route::get('/events/{event}/recommendations', [EventsController::class, 'recommendations']);
 Route::get('/events/{id}', [EventsController::class, 'show']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 Route::get('/categories/{id}', [CategoriesController::class, 'show']);
@@ -167,7 +168,6 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy']);
 
     Route::patch('/events/{id}/trending', [EventsController::class, 'setTrending']);
-    Route::patch('/events/{id}/upcoming', [EventsController::class, 'setUpcoming']);
 
     // Organizer management helpers for admins.
     Route::post('/organizers', [OrganizerController::class, 'store']);

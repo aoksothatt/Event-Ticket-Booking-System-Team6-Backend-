@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Booking;
 use App\Models\Event;
 use App\Models\Setting;
+use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -27,6 +30,7 @@ class EventsController extends Controller
      *   search      – title/description text search (case-insensitive)
      *   category_id – filter by category
      *   status      – filter by status (draft/published/cancelled)
+     *   filter      – all | trending | upcoming (server-side managed lists)
      *   is_trending – filter trending events (1/0)
      *   sort_by     – start_date | start_time | title | created_at (default: created_at)
      *   order       – asc | desc (default: desc)
@@ -37,6 +41,7 @@ class EventsController extends Controller
         $request->validate([
             'category_id' => 'sometimes|integer|exists:categories,id',
             'status' => 'sometimes|in:draft,published,cancelled',
+            'filter' => 'sometimes|in:all,trending,upcoming',
             'is_trending' => 'sometimes|boolean',
             'per_page' => 'sometimes|integer|min:1|max:100',
             'sort_by' => 'sometimes|in:start_date,start_time,title,created_at',
@@ -62,6 +67,15 @@ class EventsController extends Controller
             ->when($request->filled('is_trending'), function ($query) use ($request) {
                 $query->where('is_trending', $request->boolean('is_trending'));
             })
+            ->when($request->filled('filter'), function ($query) use ($request) {
+                match ($request->query('filter')) {
+                    // Same rule as the public /events/trending endpoint.
+                    'trending' => $query->trending()->where('end_date', '>=', today()->toDateString()),
+                    // Same rule as the public /events/upcoming endpoint.
+                    'upcoming' => $query->upcoming(),
+                    default => null, // "all" keeps every status
+                };
+            })
             ->orderBy($sortBy, $order)
             ->paginate((int) $request->get('per_page', 10));
 
@@ -73,9 +87,10 @@ class EventsController extends Controller
     }
 
     /**
-     * Upcoming events for the homepage banner: published events that the
-     * admin manually flagged with `is_upcoming = true`. No automatic date
-     * logic — the admin decides which events appear in the banner.
+     * Upcoming events for the homepage and admin "Upcoming" list: every
+     * published event whose start date has not passed yet (see the
+     * `upcoming` scope). Fully derived from the event dates — there is no
+     * manual upcoming flag, so past events can never leak into the list.
      */
     public function upcoming(Request $request)
     {
@@ -84,7 +99,7 @@ class EventsController extends Controller
         ]);
 
         $events = Event::with(self::HOMEPAGE_RELATIONS)
-            ->upcomingFlagged()
+            ->upcoming()
             ->orderBy('start_date')
             ->orderBy('start_time')
             ->paginate((int) $request->get('per_page', 10));
@@ -170,7 +185,168 @@ class EventsController extends Controller
     }
 
     /**
+     * "You Might Also Like" — ranks other bookable events by relevance to the
+     * event currently being viewed.
+     *
+     * Relevance scoring (highest first):
+     *   same category       +5
+     *   same venue          +3
+     *   same city           +2
+     *   date within 30 days +2
+     *   admin-trending      +2
+     *   has bookings        +2
+     *   user affinity       +2  (authenticated: categories they favorited/booked)
+     *
+     * The request is public so guests can browse recommendations without an
+     * account; when a valid JWT is present the user's past engagement quietly
+     * boosts matching categories. The linked event itself and any
+     * cancelled/ended/unpublished events are always excluded.
+     *
+     * If there are too few relevant candidates the results are topped up with
+     * popular / trending / upcoming published events.
+     */
+    public function recommendations(Request $request, $id)
+    {
+        $event = Event::with(['category', 'venue'])->findOrFail($id);
+
+        $limit = min(max((int) $request->get('limit', 8), 1), 12);
+
+        $now = today()->toDateString();
+        $nearFrom = Carbon::parse($event->start_date)->subDays(30)->toDateString();
+        $nearTo = Carbon::parse($event->start_date)->addDays(30)->toDateString();
+        $city = $event->venue?->city;
+
+        // Optional personalization for signed-in users: boost the categories
+        // they have already favorited or booked before.
+        $affinityCategoryIds = collect();
+        if ($user = $this->optionalApiUser($request)) {
+            $favorited = $user->favorites()->pluck('events.category_id');
+            $bookedCategoryIds = Event::whereIn(
+                'id',
+                Booking::where('user_id', $user->id)->pluck('event_id')
+            )->pluck('category_id');
+
+            $affinityCategoryIds = collect($favorited)
+                ->merge($bookedCategoryIds)
+                ->filter()
+                ->unique()
+                ->values();
+        }
+
+        // Candidate pool: published, not yet ended, never the current event.
+        $bookingsCount = fn ($q) => $q->whereNotIn('status', ['cancelled', 'expired']);
+
+        $candidates = Event::query()
+            ->published()
+            ->where('end_date', '>=', $now)
+            ->where('id', '!=', $event->id)
+            ->with(['venue', 'category', 'images', 'ticketTypes'])
+            ->withCount(['bookings' => $bookingsCount]);
+
+        // Static relevance in SQL so the database ranks candidates for us.
+        $scoreSql = '(CASE WHEN events.category_id = ? THEN 5 ELSE 0 END)'
+            . ' + (CASE WHEN events.venue_id = ? THEN 3 ELSE 0 END)'
+            . ($city
+                ? ' + (CASE WHEN events.venue_id IN (SELECT id FROM venues WHERE city = ?) THEN 2 ELSE 0 END)'
+                : '')
+            . ' + (CASE WHEN events.start_date BETWEEN ?::date AND ?::date THEN 2 ELSE 0 END)'
+            . ' + (CASE WHEN events.is_trending THEN 2 ELSE 0 END)';
+
+        $scoreBindings = [$event->category_id, $event->venue_id];
+        if ($city) {
+            $scoreBindings[] = $city;
+        }
+        $scoreBindings[] = $nearFrom;
+        $scoreBindings[] = $nearTo;
+
+        $candidates
+            ->orderByRaw($scoreSql, $scoreBindings)
+            ->orderBy('start_date')
+            ->orderBy('start_time');
+
+        $recommended = $candidates->limit($limit * 3)->get();
+
+        // Fallback: top up any shortfall with popular / trending / upcoming.
+        if ($recommended->count() < $limit) {
+            $takenIds = $recommended->pluck('id')->push($event->id);
+
+            $fallback = Event::query()
+                ->published()
+                ->where('end_date', '>=', $now)
+                ->whereNotIn('id', $takenIds)
+                ->with(['venue', 'category', 'images', 'ticketTypes'])
+                ->withCount(['bookings' => $bookingsCount])
+                ->orderBy('is_trending', 'desc')
+                ->orderByDesc('bookings_count')
+                ->orderBy('start_date')
+                ->limit($limit - $recommended->count())
+                ->get();
+
+            $recommended = $recommended->concat($fallback);
+        }
+
+        // Final ranking: re-score in PHP so popularity and the (optional)
+        // user affinity boost participate alongside the static signals.
+        $ranked = $recommended
+            ->map(function (Event $candidate) use ($event, $nearFrom, $nearTo, $affinityCategoryIds) {
+                $score = intval($candidate->category_id === $event->category_id ? 5 : 0)
+                    + intval($candidate->venue_id === $event->venue_id ? 3 : 0)
+                    + intval($candidate->venue && $event->venue
+                        && $candidate->venue->city && $candidate->venue->city === $event->venue->city ? 2 : 0)
+                    + intval($candidate->start_date->between($nearFrom, $nearTo) ? 2 : 0)
+                    + intval($candidate->is_trending ? 2 : 0)
+                    + intval($candidate->bookings_count >= 1 ? 2 : 0)
+                    + intval($affinityCategoryIds->contains($candidate->category_id) ? 2 : 0);
+
+                $candidate->recommendation_score = $score;
+
+                return $candidate;
+            })
+            ->sort(function ($a, $b) {
+                return [
+                    $b->recommendation_score,
+                    $b->bookings_count,
+                    $a->start_date->timestamp,
+                ] <=> [
+                    $a->recommendation_score,
+                    $a->bookings_count,
+                    $b->start_date->timestamp,
+                ];
+            })
+            ->values()
+            ->take($limit);
+
+        // Strip the internal scoring helpers from the response payload.
+        $ranked->each(function (Event $candidate) {
+            unset($candidate->recommendation_score);
+            unset($candidate->bookings_count);
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Recommendations retrieved successfully',
+            'data' => $ranked,
+        ]);
+    }
+
+    /**
+     * Resolve the current JWT user when a token was sent, without ever
+     * failing the request for guests or for invalid/expired tokens.
+     */
+    private function optionalApiUser(Request $request): ?User
+    {
+        try {
+            return $request->user('api');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * Manually set an event's trending status (admin-only).
+     *
+     * Upcoming needs no equivalent toggle: it is derived automatically from
+     * the event's published status and start date (see Event::scopeUpcoming).
      */
     public function setTrending(Request $request, $id)
     {
@@ -185,30 +361,6 @@ class EventsController extends Controller
         ]);
 
         $message = $event->is_trending ? __('messages.event_added_trending') : __('messages.event_removed_trending');
-
-        return response()->json([
-            'success' => true,
-            'message' => $message,
-            'data' => $event->fresh(self::HOMEPAGE_RELATIONS),
-        ]);
-    }
-
-    /**
-     * Manually set an event's upcoming status (admin-only).
-     */
-    public function setUpcoming(Request $request, $id)
-    {
-        $event = Event::findOrFail($id);
-
-        $validated = $request->validate([
-            'is_upcoming' => 'required|boolean',
-        ]);
-
-        $event->update([
-            'is_upcoming' => $validated['is_upcoming'],
-        ]);
-
-        $message = $event->is_upcoming ? __('messages.event_added_upcoming') : __('messages.event_removed_upcoming');
 
         return response()->json([
             'success' => true,
@@ -248,7 +400,7 @@ class EventsController extends Controller
             'start_time' => 'nullable|date_format:H:i',
             'end_time' => 'nullable|date_format:H:i|after:start_time',
 
-            'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
 
             'status' => 'nullable|in:draft,published,cancelled',
         ]);
@@ -339,7 +491,7 @@ class EventsController extends Controller
             'end_date' => 'sometimes|date|after_or_equal:start_date',
             'start_time' => 'nullable|date_format:H:i',
             'end_time' => 'nullable|date_format:H:i|after:start_time',
-            'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'status' => 'sometimes|in:draft,published,cancelled',
             'is_trending' => 'sometimes|boolean',
         ]);

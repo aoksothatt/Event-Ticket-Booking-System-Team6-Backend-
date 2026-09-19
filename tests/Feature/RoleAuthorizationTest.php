@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Booking;
+use App\Models\Event;
 use App\Models\EventStaff;
 use App\Models\Organizer;
+use App\Models\Review;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -111,5 +114,84 @@ class RoleAuthorizationTest extends TestCase
         $this->withToken($token)
             ->putJson('/api/organizer/staff/'.$assignment->id, ['is_active' => false])
             ->assertStatus(404);
+    }
+
+    public function test_admin_can_moderate_another_users_review(): void
+    {
+        $customer = User::factory()->create(['role' => 'customer', 'status' => 'active']);
+        $event = Event::factory()->create(['status' => 'published']);
+        $review = Review::create([
+            'event_id' => $event->id,
+            'user_id' => $customer->id,
+            'rating' => 5,
+            'comment' => 'Great event',
+            'status' => 'active',
+        ]);
+
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $token = JWTAuth::fromUser($admin);
+
+        // Admin can publish a review written by another user (Reviews.vue).
+        $this->withToken($token)
+            ->putJson("/api/reviews/{$review->id}", ['status' => 'published'])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+        $this->assertDatabaseHas('reviews', ['id' => $review->id, 'status' => 'published']);
+
+        // Admin can delete any review.
+        $this->withToken($token)
+            ->deleteJson("/api/reviews/{$review->id}")
+            ->assertOk()
+            ->assertJson(['success' => true]);
+        $this->assertDatabaseMissing('reviews', ['id' => $review->id]);
+    }
+
+    public function test_customer_cannot_moderate_another_users_review(): void
+    {
+        $owner = User::factory()->create(['role' => 'customer', 'status' => 'active']);
+        $other = User::factory()->create(['role' => 'customer', 'status' => 'active']);
+        $event = Event::factory()->create(['status' => 'published']);
+        $review = Review::create([
+            'event_id' => $event->id,
+            'user_id' => $owner->id,
+            'rating' => 4,
+            'comment' => 'Nice',
+            'status' => 'active',
+        ]);
+
+        $token = JWTAuth::fromUser($other);
+
+        $this->withToken($token)
+            ->putJson("/api/reviews/{$review->id}", ['status' => 'published'])
+            ->assertStatus(404);
+
+        $this->withToken($token)
+            ->deleteJson("/api/reviews/{$review->id}")
+            ->assertStatus(404);
+    }
+
+    public function test_non_admin_cannot_delete_booking(): void
+    {
+        $customer = User::factory()->create(['role' => 'customer', 'status' => 'active']);
+        $booking = Booking::factory()->create(['user_id' => $customer->id]);
+        $token = JWTAuth::fromUser($customer);
+
+        $this->withToken($token)
+            ->deleteJson("/api/bookings/{$booking->id}")
+            ->assertStatus(403);
+        $this->assertDatabaseHas('Booking', ['id' => $booking->id]);
+    }
+
+    public function test_admin_can_delete_booking(): void
+    {
+        $booking = Booking::factory()->create();
+        $admin = User::factory()->create(['role' => 'admin', 'status' => 'active']);
+        $token = JWTAuth::fromUser($admin);
+
+        $this->withToken($token)
+            ->deleteJson("/api/bookings/{$booking->id}")
+            ->assertOk()
+            ->assertJson(['success' => true]);
+        $this->assertDatabaseMissing('Booking', ['id' => $booking->id]);
     }
 }

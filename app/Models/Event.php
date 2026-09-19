@@ -31,7 +31,6 @@ class Event extends Model
         'banner',
         'status',
         'is_trending',
-        'is_upcoming',
     ];
 
     /** @var array<string, string> */
@@ -39,7 +38,18 @@ class Event extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'is_trending' => 'boolean',
-        'is_upcoming' => 'boolean',
+    ];
+
+    /**
+     * Always serialize the computed `is_upcoming` flag so every consumer
+     * (admin dashboard, homepage, event cards, event detail) reads the same
+     * date-derived value — including environments where no `is_upcoming`
+     * column exists.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'is_upcoming',
     ];
 
     /* ---------------------------- Relationships --------------------------- */
@@ -117,23 +127,31 @@ class Event extends Model
     }
 
     /**
-     * Manual admin pick for the homepage "Upcoming" banner, restricted to
-     * published events only. No date logic — the admin decides what shows.
-     */
-    public function scopeUpcomingFlagged(Builder $query): Builder
-    {
-        return $query->published()
-            ->where('is_upcoming', true);
-    }
-
-    /**
-     * Events that have not ended yet (end_date is today or later).
+     * Events treated as "Upcoming": published (which already excludes
+     * cancelled events) and whose start date has not passed yet.
+     *
+     * Derived entirely from the event's own dates — there is no manual
+     * upcoming flag — so it can never go stale and is the single source
+     * of truth shared by the admin dashboard and the customer homepage.
      *
      * Uses toDateString() so the comparison stays a plain DATE on
      * PostgreSQL and never picks up a time-of-day offset.
      */
     public function scopeUpcoming(Builder $query): Builder
     {
-        return $query->where('end_date', '>=', today()->toDateString());
+        return $query->published()
+            ->where('start_date', '>=', today()->toDateString());
+    }
+
+    /**
+     * Whether this event is "Upcoming" right now. Computed, never stored:
+     * an event is upcoming when it is published and its start date has not
+     * passed. Exposing it under `is_upcoming` gives frontends one field that
+     * always matches the same rule used by the upcoming filter/listings.
+     */
+    public function getIsUpcomingAttribute(): bool
+    {
+        return $this->status === 'published'
+            && $this->start_date?->startOfDay()->gte(today()) === true;
     }
 }
