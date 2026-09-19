@@ -146,6 +146,45 @@ class EventStatusFilterTest extends TestCase
         $this->getJson('/api/events?filter=weekend')->assertStatus(422);
     }
 
+    public function test_search_matches_title_and_description_case_insensitively(): void
+    {
+        $event = Event::factory()->create([
+            'title' => 'Sovath Live in Phnom Penh',
+            'description' => 'A night with the legendary singer.',
+        ]);
+        Event::factory()->create([
+            'title' => 'Some Other Show',
+            'description' => 'Nothing relevant here.',
+        ]);
+
+        $ids = $this->getJson('/api/events?search=Sovath&per_page=100')
+            ->assertOk()
+            ->json('data.data.*.id');
+
+        $this->assertContains($event->id, $ids);
+        $this->assertCount(1, $ids);
+
+        $lowercase = $this->getJson('/api/events?search=sovath&per_page=100')
+            ->assertOk()
+            ->json('data.data.*.id');
+
+        $this->assertSame([$event->id], $lowercase);
+    }
+
+    public function test_search_accepts_legacy_q_parameter(): void
+    {
+        $event = Event::factory()->create([
+            'title' => 'Kon Khmer Music Festival',
+            'description' => 'Traditional performers unite.',
+        ]);
+
+        $ids = $this->getJson('/api/events?q=Khmer&per_page=100')
+            ->assertOk()
+            ->json('data.data.*.id');
+
+        $this->assertContains($event->id, $ids);
+    }
+
     public function test_admin_can_toggle_trending_and_customer_cannot(): void
     {
         $event = Event::factory()->create(['status' => 'published']);

@@ -86,7 +86,6 @@ Route::get('/events/category/{categoryId}', [EventsController::class, 'byCategor
 Route::get('/events/slug/{slug}', [EventsController::class, 'showBySlug']);
 Route::get('/events/{event}/recommendations', [EventsController::class, 'recommendations']);
 Route::get('/events/{id}', [EventsController::class, 'show']);
-Route::get('/events/{event}/recommendations', [EventsController::class, 'recommendations']);
 Route::get('/categories', [CategoriesController::class, 'index']);
 Route::get('/categories/{id}', [CategoriesController::class, 'show']);
 Route::get('/ticket-types', [TicketTypeController::class, 'index']);

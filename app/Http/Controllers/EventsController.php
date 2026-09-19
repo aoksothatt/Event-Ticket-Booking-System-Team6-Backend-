@@ -7,7 +7,7 @@ use App\Models\Event;
 use App\Http\Resources\EventResource;
 use App\Models\Setting;
 use App\Models\User;
-use Carbon\Carbon; 6d26a72 (feat: event image management, recommendations, admin image UI, and EventDetailPage enhancements)
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -52,8 +52,11 @@ class EventsController extends Controller
         $sortBy = $request->get('sort_by', 'created_at');
         $order = $request->get('order', 'desc') === 'asc' ? 'asc' : 'desc';
 
+        // Accept either `?search=` (navbar dropdown) or `?q=` (legacy).
+        $search = trim((string) $request->query('search', $request->query('q', '')));
+
         $events = Event::with(self::HOMEPAGE_RELATIONS)
-            ->when($request->filled('search'), function ($query, $search) {
+            ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('title', 'ilike', "%{$search}%")
                         ->orWhere('description', 'ilike', "%{$search}%");
@@ -88,57 +91,6 @@ class EventsController extends Controller
     }
 
     /**
-     * "You Might Also Like" — published, upcoming events that share the
-     * same category and/or venue city, ranked by how many attributes match.
-     * Each item carries its primary cover image (`sort_order = 1`).
-     */
-    public function recommendations(Request $request, $id)
-    {
-        $event = Event::with('venue')->findOrFail($id);
-
-        $limit = (int) $request->get('limit', 8);
-        $limit = max(1, min($limit, 20));
-
-        $city = $event->venue?->city;
-
-        $query = Event::query()
-            ->leftJoin('venues', 'events.venue_id', '=', 'venues.id')
-            ->with(['venue', 'category', 'primaryImage'])
-            ->where('events.id', '!=', $event->id)
-            ->where('events.status', 'published')
-            ->whereDate('events.end_date', '>=', now()->toDateString())
-            ->select('events.*');
-
-        // Only narrow down when the source event actually has attributes to
-        // match on; otherwise fall back to the latest published events.
-        if ($event->category_id !== null || $city !== null) {
-            $query->where(function ($q) use ($event, $city) {
-                if ($event->category_id !== null) {
-                    $q->orWhere('events.category_id', $event->category_id);
-                }
-                if ($city !== null) {
-                    $q->orWhere('venues.city', $city);
-                }
-            });
-        }
-
-        $events = $query
-            ->orderByRaw(
-                '(CASE WHEN events.category_id = ? THEN 1 ELSE 0 END)
-                 + (CASE WHEN venues.city = ? THEN 1 ELSE 0 END) DESC,
-                 events.start_date ASC',
-                [$event->category_id, $city]
-            )
-            ->limit($limit)
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => EventResource::collection($events),
-        ]);
-    }
-
-    /**
      * Trending events for the customer homepage.
      * Driven by the admin's manual `is_trending` selection — only published,
      * still-active events are returned so drafts and past events never leak in.
@@ -155,6 +107,26 @@ class EventsController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Trending events retrieved successfully',
+            'data' => $events,
+        ]);
+    }
+
+    /**
+     * Upcoming events for the customer homepage.
+     * Published events whose start date has not passed yet.
+     */
+    public function upcoming()
+    {
+        $events = Event::with(self::HOMEPAGE_RELATIONS)
+            ->upcoming()
+            ->where('end_date', '>=', today()->toDateString())
+            ->orderBy('start_date')
+            ->orderBy('start_time')
+            ->paginate();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Upcoming events retrieved successfully',
             'data' => $events,
         ]);
     }

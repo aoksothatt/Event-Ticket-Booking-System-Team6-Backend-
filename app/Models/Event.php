@@ -91,7 +91,6 @@ class Event extends Model
         return $this->hasOne(EventImg::class)
             ->orderBy('sort_order', 'asc');
     }
->>>>>>> 6d26a72 (feat: event image management, recommendations, admin image UI, and EventDetailPage enhancements)
     public function ticketTypes(): HasMany
     {
         return $this->hasMany(TicketType::class, 'event_id');
