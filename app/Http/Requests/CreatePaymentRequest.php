@@ -42,6 +42,12 @@ class CreatePaymentRequest extends FormRequest
         $minTickets = (int) Setting::value('booking.min_tickets', 1);
         $maxTickets = (int) Setting::value('booking.max_tickets', 10);
 
+        // The phone number on a checkout is NOT trusted. When booking.require_phone
+        // is enabled the backend uses the authenticated user's profile phone and
+        // rejects the checkout with a 422 (PHONE_REQUIRED) if that profile has no
+        // number yet. A client-supplied "phone" field is tolerated for backward
+        // compatibility but never read or persisted by the booking flow.
+
         return [
             'event_id' => 'required|integer|exists:events,id',
 
@@ -52,6 +58,10 @@ class CreatePaymentRequest extends FormRequest
             // Legacy single-item shape.
             'ticket_type_id' => 'sometimes|integer|exists:ticket_types,id',
             'quantity' => "sometimes|integer|min:{$minTickets}|max:{$maxTickets}",
+
+            // Accepted for backward compatibility only — the booking flow derives
+            // the phone from the authenticated user's profile, never from here.
+            'phone' => ['nullable', 'string', 'max:20'],
 
             // Optional: reuse an existing pending booking (retry a payment).
             'booking_id' => 'sometimes|nullable|integer|exists:Booking,id',

@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Http\Resources\EventResource;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\EventStatsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -23,6 +24,10 @@ class EventsController extends Controller
         'images',
         'ticketTypes',
     ];
+
+    public function __construct(
+        private readonly EventStatsService $stats,
+    ) {}
 
     /**
      * All events with search, filters, sorting, and pagination.
@@ -41,8 +46,8 @@ class EventsController extends Controller
     {
         $request->validate([
             'category_id' => 'sometimes|integer|exists:categories,id',
-            'status' => 'sometimes|in:draft,published,cancelled',
-            'filter' => 'sometimes|in:all,trending,upcoming',
+            'status' => 'sometimes|in:draft,published,cancelled,rejected',
+            'filter' => 'sometimes|in:all,trending,upcoming,pending',
             'is_trending' => 'sometimes|boolean',
             'per_page' => 'sometimes|integer|min:1|max:100',
             'sort_by' => 'sometimes|in:start_date,start_time,title,created_at',
@@ -77,6 +82,9 @@ class EventsController extends Controller
                     'trending' => $query->trending()->where('end_date', '>=', today()->toDateString()),
                     // Same rule as the public /events/upcoming endpoint.
                     'upcoming' => $query->upcoming(),
+                    // Awaiting-approval queue: events created as drafts by
+                    // organizers (forced when admin approval is required).
+                    'pending' => $query->where('status', 'draft'),
                     default => null, // "all" keeps every status
                 };
             })
@@ -155,10 +163,18 @@ class EventsController extends Controller
     }
 
     // Show event details
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $event = Event::with(self::HOMEPAGE_RELATIONS)
             ->findOrFail($id);
+
+        // Real booking statistics (Tickets Sold / Revenue) for staff views only:
+        // admins, organizers and event staff see them; customers and guests never
+        // receive revenue data from the public event endpoint.
+        $user = $request->user();
+        if ($user && in_array($user->role, ['admin', 'organizer', 'event_staff'], true)) {
+            $event->setAttribute('stats', $this->stats->forEvent((int) $event->id));
+        }
 
         return response()->json([
             'success' => true,
@@ -368,6 +384,56 @@ class EventsController extends Controller
         ]);
     }
 
+    /**
+     * Approve a pending event (admin-only).
+     *
+     * The approval workflow reuses the existing status column: organizer
+     * submissions land as "draft" when administrator approval is required,
+     * and approve() is the only path that publishes them. Any stored rejection
+     * reason is cleared so a re-submission starts clean.
+     */
+    public function approve($id)
+    {
+        $event = Event::findOrFail($id);
+
+        $event->update([
+            'status' => 'published',
+            'rejection_reason' => null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('messages.event_approved'),
+            'data' => $event->fresh(self::HOMEPAGE_RELATIONS),
+        ]);
+    }
+
+    /**
+     * Reject a pending event with an optional reason (admin-only).
+     *
+     * Rejected events can be revised and resubmitted by the organizer (which
+     * sets them back to draft) before an admin approves them.
+     */
+    public function reject(Request $request, $id)
+    {
+        $event = Event::findOrFail($id);
+
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $event->update([
+            'status' => 'rejected',
+            'rejection_reason' => $validated['reason'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('messages.event_rejected'),
+            'data' => $event->fresh(self::HOMEPAGE_RELATIONS),
+        ]);
+    }
+
     // Create new event
     public function store(Request $request)
     {
@@ -494,7 +560,7 @@ class EventsController extends Controller
             'start_time' => 'nullable|date_format:H:i',
             'end_time' => 'nullable|date_format:H:i|after:start_time',
             'banner' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'status' => 'sometimes|in:draft,published,cancelled',
+            'status' => 'sometimes|in:draft,published,cancelled,rejected',
             'is_trending' => 'sometimes|boolean',
         ]);
 

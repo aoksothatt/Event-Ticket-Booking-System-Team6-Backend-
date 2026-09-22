@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CheckIn;
+use App\Models\Setting;
 use App\Models\Ticket;
 use App\Services\TicketExpirationService;
 use Illuminate\Http\Request;
@@ -73,6 +74,8 @@ class TicketController extends Controller
             ->latest()
             ->get();
 
+        $this->hideQrIfDisabled($tickets);
+
         return response()->json([
             'success' => true,
             'data' => $tickets,
@@ -97,10 +100,29 @@ class TicketController extends Controller
             ->latest()
             ->paginate($request->get('per_page', 15));
 
+        $this->hideQrIfDisabled($tickets);
+
         return response()->json([
             'success' => true,
             'data' => $tickets,
         ]);
+    }
+
+    /**
+     * Strip every qr_token when the platform has QR codes disabled
+     * (ticket.qr_enabled). Accepts a collection or a paginator.
+     */
+    protected function hideQrIfDisabled($tickets): void
+    {
+        if (Setting::value('ticket.qr_enabled', true)) {
+            return;
+        }
+
+        $records = method_exists($tickets, 'getCollection')
+            ? $tickets->getCollection()
+            : $tickets;
+
+        $records->each->makeHidden('qr_token');
     }
 
     /**

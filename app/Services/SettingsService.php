@@ -111,10 +111,12 @@ class SettingsService
     {
         // Mirror of what the SPA actually consumes (branding, auth/registration
         // gates, maintenance state). Booking/payment/event enforcement stays
-        // server-side, so those keys are intentionally not exposed here.
+        // server-side, so only the booking gates the SPA must render for are
+        // exposed (e.g. booking.require_phone lets checkout collect the number).
         $keys = [
             'general.platform_name',
             'general.platform_description',
+            'appearance.logo',
             'appearance.favicon',
             'appearance.primary_color',
             'appearance.theme',
@@ -122,6 +124,7 @@ class SettingsService
             'user.registration_enabled',
             'user.google_login',
             'ticket.qr_enabled',
+            'booking.require_phone',
             'system.maintenance_mode',
             'system.maintenance_message',
         ];

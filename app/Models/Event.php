@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
 class Event extends Model
 {
@@ -31,6 +32,7 @@ class Event extends Model
         'end_time',
         'banner',
         'status',
+        'rejection_reason',
         'is_trending',
     ];
 
@@ -51,6 +53,7 @@ class Event extends Model
      */
     protected $appends = [
         'is_upcoming',
+        'is_expired',
     ];
 
     /* ---------------------------- Relationships --------------------------- */
@@ -137,7 +140,8 @@ class Event extends Model
 
     /**
      * Events treated as "Upcoming": published (which already excludes
-     * cancelled events) and whose start date has not passed yet.
+     * cancelled events), whose start date has not passed yet AND that have
+     * not ended already (end datetime in the past = past event).
      *
      * Derived entirely from the event's own dates — there is no manual
      * upcoming flag — so it can never go stale and is the single source
@@ -149,18 +153,69 @@ class Event extends Model
     public function scopeUpcoming(Builder $query): Builder
     {
         return $query->published()
-            ->where('start_date', '>=', today()->toDateString());
+            ->where('start_date', '>=', today()->toDateString())
+            ->where(function (Builder $q) {
+                // An event that ended earlier today (end_time already passed)
+                // must leave the upcoming listings too, not just tomorrow's.
+                // A missing end_date is tolerated and treated as not-yet-ended
+                // (the start date is already guaranteed to be today-or-later).
+                $q->whereNull('end_date')
+                    ->orWhere('end_date', '>', today()->toDateString())
+                    ->orWhere(function (Builder $q) {
+                        $q->where('end_date', today()->toDateString())
+                            ->where(function (Builder $q) {
+                                $q->whereNull('end_time')
+                                    ->orWhereTime('end_time', '>', now()->format('H:i:s'));
+                            });
+                    });
+            });
     }
 
     /**
      * Whether this event is "Upcoming" right now. Computed, never stored:
-     * an event is upcoming when it is published and its start date has not
-     * passed. Exposing it under `is_upcoming` gives frontends one field that
-     * always matches the same rule used by the upcoming filter/listings.
+     * an event is upcoming when it is published, its start date has not
+     * passed and its end datetime is still in the future. Exposing it under
+     * `is_upcoming` gives frontends one field that always matches the same
+     * rule used by the upcoming filter/listings.
      */
     public function getIsUpcomingAttribute(): bool
     {
         return $this->status === 'published'
-            && $this->start_date?->startOfDay()->gte(today()) === true;
+            && $this->start_date?->startOfDay()->gte(today()) === true
+            && ! $this->is_expired;
+    }
+
+    /**
+     * The real end timestamp of the event (end_date + end_time) as UTC,
+     * matching the convention used by TicketExpirationService. Null end_time
+     * falls back to the end of the day so a date-only event never reads as
+     * "already ended" at 00:00:01.
+     */
+    public function endsAt(): ?Carbon
+    {
+        if ($this->end_date === null) {
+            return null;
+        }
+
+        return Carbon::parse($this->end_date->toDateString())
+            ->setTimeFromTimeString((string) ($this->end_time ?: '23:59:59'))
+            ->utc();
+    }
+
+    /**
+     * Whether the event has already finished: current UTC datetime passed
+     * end_date + end_time. Exposed as `is_expired` on every serialized event
+     * so frontends can render an Expired/Past state and disable booking.
+     */
+    public function isExpired(): bool
+    {
+        $endsAt = $this->endsAt();
+
+        return $endsAt !== null && $endsAt->lt(Carbon::now('UTC'));
+    }
+
+    public function getIsExpiredAttribute(): bool
+    {
+        return $this->isExpired();
     }
 }

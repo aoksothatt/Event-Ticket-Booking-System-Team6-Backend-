@@ -105,12 +105,17 @@ class CheckoutController extends Controller
             ], 403);
         }
 
+        // When phone collection is required the buyer's PROFILE phone is the one
+        // and only source of truth: the checkout payload is never trusted and
+        // nothing is persisted here. The customer is directed to update their
+        // profile (SettingsView) and return.
         if (Setting::value('booking.require_phone', false)
-            && trim((string) $user->phone) === '') {
+            && trim((string) ($user->phone ?? '')) === '') {
             return response()->json([
                 'success' => false,
-                'message' => 'A phone number is required on your profile before you can book tickets.',
-            ], 403);
+                'message' => 'Please add a phone number to your profile before completing this booking.',
+                'code' => 'PHONE_REQUIRED',
+            ], 422);
         }
 
         $bookingId = isset($validated['booking_id']) ? (int) $validated['booking_id'] : null;
@@ -139,6 +144,13 @@ class CheckoutController extends Controller
                             ? 'This event has been cancelled and tickets are no longer available.'
                             : 'This event is not currently available for booking.'
                     );
+                }
+                // A finished event must never accept a new booking or a retry:
+                // this rejects once the current datetime has passed the event's
+                // end datetime (end_date + end_time). Respects event.auto_handle_past
+                // so administrators can keep events buyable past their end date.
+                if (Setting::value('event.auto_handle_past', true) && $event->isExpired()) {
+                    throw new \RuntimeException('This event has ended and tickets are no longer available for purchase.', 422);
                 }
 
                 if ($useExistingBooking) {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -9,8 +10,15 @@ class TicketResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $canViewQr = $request->user()?->id === $this->user_id
-            || in_array($request->user()?->role, ['admin', 'organizer', 'event_staff'], true);
+        // QR tokens are only disclosed when the platform has QR codes enabled
+        // (ticket.qr_enabled). Disabling QRs hides every token — the customer UI
+        // then falls back to the plain ticket_code (e.g. a manual "tap to
+        // check-in" flow) and no scannable QR is ever rendered.
+        $qrEnabled = (bool) Setting::value('ticket.qr_enabled', true);
+
+        $canViewQr = $qrEnabled
+            && ($request->user()?->id === $this->user_id
+                || in_array($request->user()?->role, ['admin', 'organizer', 'event_staff'], true));
 
         return [
             'id' => $this->id,

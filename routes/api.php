@@ -154,6 +154,7 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     // catalog in config/settings.php and persisted to the `settings` table.
     Route::get('/settings', [SettingsController::class, 'index']);
     Route::match(['put', 'patch'], '/settings', [SettingsController::class, 'update']);
+    Route::post('/settings/logo', [SettingsController::class, 'uploadLogo']);
 
     Route::apiResource('users', UsersController::class)->names('admin.');
 
@@ -168,6 +169,10 @@ Route::middleware(['auth:api', 'role:admin'])->prefix('admin')->group(function (
     Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy']);
 
     Route::patch('/events/{id}/trending', [EventsController::class, 'setTrending']);
+
+    // Admin approval workflow — approve/reject organizer-submitted events.
+    Route::post('/events/{id}/approve', [EventsController::class, 'approve']);
+    Route::post('/events/{id}/reject', [EventsController::class, 'reject']);
 
     // Organizer management helpers for admins.
     Route::post('/organizers', [OrganizerController::class, 'store']);

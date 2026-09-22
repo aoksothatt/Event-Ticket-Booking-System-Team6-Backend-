@@ -12,10 +12,12 @@
 |
 | Only settings backed by a real feature live here. The settings audit
 | removed every key consumed by neither backend nor frontend code (dead
-| support/currency/timezone/language fields, appearance logo/tagline/secondary
+| support/currency/timezone/language fields, appearance tagline/secondary
 | color, notification triggers with no mailer, ticket download/print/auto-mark
-| toggles). Unknown keys are ignored by SettingsService::update(), so any
-| leftover rows in the settings table are harmless and untouched.
+| toggles). `appearance.logo` was part of that cleanup but is back because the
+| Website Logo feature now uploads and renders it in the storefront theme.
+| Unknown keys are ignored by SettingsService::update(), so any leftover rows
+| in the settings table are harmless and untouched.
 |
 | Each entry:
 |   'group'   - UI group this key belongs to.
@@ -47,6 +49,17 @@ return [
         'desc' => 'settings.general.platformDescriptionDesc',
         'default' => 'Event & Ticket Booking Platform',
         'rules' => ['nullable', 'string', 'max:500'],
+    ],
+
+    'appearance.logo' => [
+        'group' => 'appearance',
+        'type' => 'string',
+        'label' => 'settings.appearance.logo',
+        'desc' => 'settings.appearance.logoDesc',
+        // Uploaded via POST /api/admin/settings/logo. Stored as the public
+        // disk path (e.g. "logos/xyz.png"); the frontend builds the URL.
+        'default' => '',
+        'rules' => ['nullable', 'string', 'max:255'],
     ],
 
     'appearance.favicon' => [

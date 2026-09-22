@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Customer;
 use App\Exceptions\CheckInException;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TicketResource;
+use App\Models\Setting;
 use App\Models\Ticket;
 use App\Services\CheckInService;
 use App\Services\TicketExpirationService;
@@ -73,6 +74,15 @@ class TicketController extends Controller
         $validated = $request->validate([
             'ticket_code' => ['required', 'string'],
         ]);
+
+        // Self check-in is a QR-based flow: when the platform disables QR codes
+        // no scannable token is ever issued, so the self-serve endpoint refuses.
+        if (! Setting::value('ticket.qr_enabled', true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Self check-in is disabled because QR codes are turned off.',
+            ], 422);
+        }
 
         $ticket = Ticket::query()
             ->where('user_id', $request->user()->id)

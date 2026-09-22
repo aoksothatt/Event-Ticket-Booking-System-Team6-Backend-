@@ -30,14 +30,17 @@ class EventStatusFilterTest extends TestCase
         $future = Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->addDays(5)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
         ]);
         $past = Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->subDays(5)->toDateString(),
+            'end_date' => now()->subDays(5)->toDateString(),
         ]);
         $draft = Event::factory()->create([
             'status' => 'draft',
             'start_date' => now()->addDays(5)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
         ]);
 
         $this->assertTrue((bool) $future->fresh()->is_upcoming);
@@ -50,18 +53,22 @@ class EventStatusFilterTest extends TestCase
         Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(3)->toDateString(),
         ]);
         Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->subDays(3)->toDateString(),
+            'end_date' => now()->subDays(3)->toDateString(),
         ]);
         Event::factory()->create([
             'status' => 'draft',
             'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(3)->toDateString(),
         ]);
         Event::factory()->create([
             'status' => 'cancelled',
             'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(3)->toDateString(),
         ]);
 
         $response = $this->getJson('/api/events/upcoming')->assertOk();
@@ -74,6 +81,7 @@ class EventStatusFilterTest extends TestCase
         $future = Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->addDays(2)->toDateString(),
+            'end_date' => now()->addDays(2)->toDateString(),
         ]);
 
         $this->getJson('/api/events?per_page=100')
@@ -110,14 +118,17 @@ class EventStatusFilterTest extends TestCase
         $future = Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->addDays(6)->toDateString(),
+            'end_date' => now()->addDays(6)->toDateString(),
         ]);
         Event::factory()->create([
             'status' => 'published',
             'start_date' => now()->subDays(6)->toDateString(),
+            'end_date' => now()->subDays(6)->toDateString(),
         ]);
         Event::factory()->create([
             'status' => 'draft',
             'start_date' => now()->addDays(6)->toDateString(),
+            'end_date' => now()->addDays(6)->toDateString(),
         ]);
 
         $ids = $this->getJson('/api/events?filter=upcoming')
