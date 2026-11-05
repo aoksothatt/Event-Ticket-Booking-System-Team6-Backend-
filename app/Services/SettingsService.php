@@ -59,7 +59,7 @@ class SettingsService
 
         $definition = $catalog[$key];
         $stored = DB::table('settings')->where('key', $key)->value('value');
-        $fallback = $default ?? $this->resolveDefault($definition['default'] ?? null);
+        $fallback = $default ?? ($definition['default'] ?? null);
 
         $value = $stored !== null
             ? $this->cast($stored, $definition['type'] ?? 'string')
@@ -262,14 +262,4 @@ class SettingsService
         return implode(' ', array_map(ucfirst(...), $words));
     }
 
-    /**
-     * A catalog default may be a closure (so it can defer to other config
-     * at resolution time) or a plain value.
-     */
-    protected function resolveDefault(mixed $default): mixed
-    {
-        return $default instanceof \Closure
-            ? $default()
-            : $default;
-    }
 }

@@ -185,9 +185,7 @@ class SettingsController extends Controller
                 'desc' => $definition['desc'] ?? null,
                 'type' => $definition['type'] ?? 'string',
                 'options' => $definition['options'] ?? null,
-                'default' => $definition['default'] instanceof \Closure
-                    ? $definition['default']()
-                    : ($definition['default'] ?? null),
+                'default' => $definition['default'] ?? null,
             ];
         }
 

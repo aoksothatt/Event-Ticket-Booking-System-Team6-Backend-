@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Always run Artisan/Nginx paths relative to the application root, regardless
+# of the working directory Render starts the container with.
+cd /var/www/html
+
 : "${APP_KEY:?APP_KEY must be set in the Render environment}"
 : "${JWT_SECRET:?JWT_SECRET must be set in the Render environment}"
 : "${DB_URL:?DB_URL must be set to the pooled Neon URL}"

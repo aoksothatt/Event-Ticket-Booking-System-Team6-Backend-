@@ -24,8 +24,9 @@
 |   'type'    - scalar type used for casting ('string'|'boolean'|'integer'|'color').
 |   'label'   - i18n key for the field label (frontend locales).
 |   'desc'    - i18n key for the field hint (frontend locales).
-|   'default' - fallback value when no row exists. May be a closure so it can
-|               read other configuration lazily at resolution time.
+|   'default' - fallback value when no row exists. Must be a cache-safe scalar
+|               (string/int/bool/array); closures are NOT allowed because the
+|               whole configuration array is serialized by `config:cache`.
 |   'rules'   - Laravel validation rules applied on update.
 |   'options' - allowed option values for select/radio fields (optional).
 |
@@ -226,7 +227,10 @@ return [
         'type' => 'integer',
         'label' => 'settings.payment.timeout',
         'desc' => 'settings.payment.timeoutDesc',
-        'default' => fn () => (int) config('bakong.qr_expiration_minutes', 15),
+        // Resolve from the same env var as config/bakong.php. Reading env()
+        // here is safe: the value is evaluated once by `config:cache` and the
+        // resulting integer is serialized, unlike a Closure.
+        'default' => (int) env('BAKONG_QR_EXPIRATION_MINUTES', 15),
         'rules' => ['required', 'integer', 'min:1'],
     ],
 
