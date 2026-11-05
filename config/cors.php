@@ -1,9 +1,19 @@
 <?php
 
-$allowedOrigins = env(
+$defaultFrontendUrl = 'https://event-ticket-booking-system-team6-ui.onrender.com';
+
+$configuredOrigins = env(
     'CORS_ALLOWED_ORIGINS',
-    env('FRONTEND_URL', 'https://event-ticket-booking-system-team6-ui.onrender.com')
+    env('FRONTEND_URL', $defaultFrontendUrl)
 );
+
+$allowedOrigins = array_values(array_unique(array_filter(array_merge(
+    array_map('trim', explode(',', (string) $configuredOrigins)),
+    [
+        (string) env('FRONTEND_URL', $defaultFrontendUrl),
+        $defaultFrontendUrl,
+    ]
+))));
 
 return [
 
@@ -24,7 +34,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', (string) $allowedOrigins)))),
+    'allowed_origins' => $allowedOrigins,
 
     'allowed_origins_patterns' => [],
 
