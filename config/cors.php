@@ -2,7 +2,7 @@
 
 $allowedOrigins = env(
     'CORS_ALLOWED_ORIGINS',
-    env('FRONTEND_URL', 'http://localhost:5173')
+    env('FRONTEND_URL', 'https://event-ticket-booking-system-team6-ui.onrender.com')
 );
 
 return [
