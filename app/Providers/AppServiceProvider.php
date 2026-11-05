@@ -9,6 +9,7 @@ use App\Services\Bakong\PaymentVerificationService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -39,6 +40,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Use the configured APP_URL as the canonical root so generated URLs
+        // (storage, redirects, links) stay correct behind Render's TLS proxy.
+        $appUrl = (string) config('app.url');
+        if (filter_var($appUrl, FILTER_VALIDATE_URL) !== false) {
+            URL::forceRootUrl(rtrim($appUrl, '/'));
+        }
+
         RateLimiter::for('auth', function (Request $request) {
             return Limit::perMinute(5)->by($request->ip());
         });
