@@ -119,6 +119,7 @@ class SettingsService
             'appearance.logo',
             'appearance.favicon',
             'appearance.primary_color',
+            'appearance.secondary_color',
             'appearance.theme',
             'appearance.footer_copyright',
             'user.registration_enabled',

@@ -80,6 +80,15 @@ return [
         'rules' => ['required', 'string', 'regex:/^#([0-9a-fA-F]{6})$/'],
     ],
 
+    'appearance.secondary_color' => [
+        'group' => 'appearance',
+        'type' => 'color',
+        'label' => 'settings.appearance.secondaryColor',
+        'desc' => 'settings.appearance.secondaryColorDesc',
+        'default' => '#334155',
+        'rules' => ['required', 'string', 'regex:/^#([0-9a-fA-F]{6})$/'],
+    ],
+
     'appearance.theme' => [
         'group' => 'appearance',
         'type' => 'string',

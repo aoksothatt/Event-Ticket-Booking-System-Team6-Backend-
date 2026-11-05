@@ -30,10 +30,16 @@ class SettingsController extends Controller
      */
     public function publicSettings(): JsonResponse
     {
+        $settings = $this->settings->publicValues();
+        $logoPath = (string) ($settings['appearance.logo'] ?? '');
+        $settings['appearance.logo_url'] = $logoPath !== ''
+            ? Storage::disk('public')->url($logoPath)
+            : '';
+
         return response()->json([
             'success' => true,
             'data' => [
-                'settings' => $this->settings->publicValues(),
+                'settings' => $settings,
             ],
         ]);
     }
@@ -122,17 +128,19 @@ class SettingsController extends Controller
         }
 
         $validated = $request->validate([
-            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
-        // Remove the previous logo from the public disk before replacing it,
-        // so orphaned files never pile up.
-        $previous = (string) $this->settings->get('appearance.logo', '');
-        if ($previous !== '' && Storage::disk('public')->exists($previous)) {
-            Storage::disk('public')->delete($previous);
-        }
-
+        // UploadedFile::store() generates a unique name, so existing logo URLs
+        // remain valid and browser caches cannot serve the previous image.
         $path = $validated['image']->store('logos', 'public');
+
+        if (! $path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The logo could not be stored. Please try again.',
+            ], 500);
+        }
 
         $updated = $this->settings->update(
             ['appearance.logo' => $path],
@@ -152,7 +160,7 @@ class SettingsController extends Controller
             'message' => 'Logo uploaded successfully.',
             'data' => [
                 'path' => $path,
-                'url' => asset('storage/'.$path),
+                'url' => Storage::disk('public')->url($path),
                 'settings' => $updated,
             ],
         ]);
