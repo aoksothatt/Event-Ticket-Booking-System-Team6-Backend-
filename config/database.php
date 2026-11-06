@@ -3,6 +3,14 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+$pgsqlUrl = env('DATABASE_URL_UNPOOLED') ?: env('DB_URL');
+
+// Neon's pooled (-pooler) endpoint does not support Laravel transactions.
+// Fall back to the direct host when no explicit unpooled URL is configured.
+if (is_string($pgsqlUrl) && str_contains($pgsqlUrl, '-pooler') && str_contains($pgsqlUrl, 'neon.tech')) {
+    $pgsqlUrl = str_replace('-pooler', '', $pgsqlUrl);
+}
+
 return [
 
     /*
@@ -86,7 +94,7 @@ return [
 
         'pgsql' => [
             'driver' => 'pgsql',
-            'url' => env('DATABASE_URL_UNPOOLED') ?: env('DB_URL'),
+            'url' => $pgsqlUrl,
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
