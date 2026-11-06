@@ -281,7 +281,9 @@ class GoogleAuthController extends Controller
 
     private function callbackUrl(array $params): string
     {
-        $base = rtrim((string) config('app.frontend_url'), '/').'/auth/google/callback';
+        // The trailing slash lets static hosts serve the SPA directory index
+        // even when no catch-all rewrite is configured; Vue Router tolerates it.
+        $base = rtrim((string) config('app.frontend_url'), '/').'/auth/google/callback/';
 
         return $base.'?'.http_build_query($params);
     }

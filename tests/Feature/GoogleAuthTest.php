@@ -20,7 +20,7 @@ class GoogleAuthTest extends TestCase
         $this->mockGoogleIdentity('google-123', 'google@example.com');
 
         $response = $this->get('/auth/google/callback');
-        $response->assertRedirectContains('/auth/google/callback?code=');
+        $response->assertRedirectContains('/auth/google/callback/?code=');
         $this->assertStringNotContainsString('token=', $response->headers->get('Location'));
 
         parse_str((string) parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
@@ -64,7 +64,7 @@ class GoogleAuthTest extends TestCase
         $this->mockGoogleIdentity('google-role', 'role@example.com');
 
         $this->get('/auth/google/callback')
-            ->assertRedirectContains('/auth/google/callback?code=');
+            ->assertRedirectContains('/auth/google/callback/?code=');
 
         $this->assertDatabaseHas('users', [
             'email' => 'role@example.com',
@@ -83,7 +83,7 @@ class GoogleAuthTest extends TestCase
         $this->mockGoogleIdentity('google-existing', 'existing@example.com');
 
         $this->get('/auth/google/callback')
-            ->assertRedirectContains('/auth/google/callback?code=');
+            ->assertRedirectContains('/auth/google/callback/?code=');
 
         $this->assertDatabaseHas('users', [
             'id' => $existing->id,
