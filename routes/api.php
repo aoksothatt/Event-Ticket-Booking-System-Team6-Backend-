@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\TicketController as ApiTicketController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\EmailOTPController;
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\BookingItemController;
@@ -63,6 +64,7 @@ Route::get('/language/{locale}', function (string $locale) {
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
+    Route::post('/google/exchange', [GoogleAuthController::class, 'exchange'])->middleware('throttle:google-exchange');
     Route::post('/otp/send', [EmailOTPController::class, 'forgetPassword'])->middleware('throttle:otp');
     Route::post('/otp/verify', [EmailOTPController::class, 'verifyOTP'])->middleware('throttle:otp');
     Route::post('/reset', [EmailOTPController::class, 'resetPassword'])->middleware('throttle:otp');

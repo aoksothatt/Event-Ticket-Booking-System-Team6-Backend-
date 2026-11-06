@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as GoogleUser;
 use Mockery;
@@ -18,17 +19,36 @@ class GoogleAuthTest extends TestCase
         $this->mockGoogleIdentity('google-123', 'google@example.com');
 
         $response = $this->get('/auth/google/callback');
-        $response->assertRedirectContains('/auth/google/callback?token=');
+        $response->assertRedirectContains('/auth/google/callback?code=');
+        $this->assertStringNotContainsString('token=', $response->headers->get('Location'));
 
         parse_str((string) parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
-        $this->assertNotEmpty($query['token'] ?? null);
+        $this->assertNotEmpty($query['code'] ?? null);
         $this->assertDatabaseHas('users', [
             'google_id' => 'google-123',
             'email' => 'google@example.com',
             'status' => 'active',
         ]);
 
-        $this->withToken($query['token'])->getJson('/api/auth/me')->assertOk();
+        $exchange = $this->postJson('/api/auth/google/exchange', ['code' => $query['code']]);
+        $exchange->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.token_type', 'bearer');
+
+        $token = $exchange->json('data.access_token');
+        $this->assertNotEmpty($token);
+        $this->withToken($token)->getJson('/api/auth/me')->assertOk();
+
+        $this->postJson('/api/auth/google/exchange', ['code' => $query['code']])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
+    }
+
+    public function test_google_code_exchange_rejects_invalid_code(): void
+    {
+        $this->postJson('/api/auth/google/exchange', ['code' => Str::random(64)])
+            ->assertStatus(422)
+            ->assertJsonPath('success', false);
     }
 
     public function test_google_login_blocks_inactive_accounts_without_a_token(): void
@@ -43,6 +63,7 @@ class GoogleAuthTest extends TestCase
         $response = $this->get('/auth/google/callback');
         $response->assertRedirectContains('error=account_inactive');
         $this->assertStringNotContainsString('token=', $response->headers->get('Location'));
+        $this->assertStringNotContainsString('code=', $response->headers->get('Location'));
     }
 
     public function test_google_login_rejects_unverified_email(): void

@@ -1,5 +1,13 @@
 <?php
 
+$frontendUrl = (string) env('FRONTEND_URL', 'http://localhost:5173');
+
+if (env('APP_ENV') === 'production' && (
+    str_contains($frontendUrl, 'localhost') || str_contains($frontendUrl, '127.0.0.1')
+)) {
+    $frontendUrl = 'https://event-ticket-booking-system-team6-ui.onrender.com';
+}
+
 return [
 
     /*
@@ -64,7 +72,7 @@ return [
     |
     */
 
-    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    'frontend_url' => $frontendUrl,
 
     /*
     |--------------------------------------------------------------------------

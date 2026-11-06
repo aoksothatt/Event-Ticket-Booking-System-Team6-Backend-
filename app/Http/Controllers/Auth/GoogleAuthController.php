@@ -3,19 +3,25 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Throwable;
 
 class GoogleAuthController extends Controller
 {
+    private const CODE_TTL_SECONDS = 120;
+
     public function redirect()
     {
         if (! Setting::value('user.google_login', true)) {
@@ -73,6 +79,7 @@ class GoogleAuthController extends Controller
                         'google_id_present' => true,
                         'email_account_conflict' => true,
                     ]);
+
                     return null;
                 }
 
@@ -118,12 +125,14 @@ class GoogleAuthController extends Controller
                 return redirect()->away($this->callbackUrl(['error' => 'account_inactive']));
             }
 
-            $token = auth('api')->login($user);
-            if (! is_string($token) || $token === '') {
-                throw new \RuntimeException('JWT provider returned an empty token.');
-            }
+            $code = Str::random(64);
+            Cache::put(
+                $this->codeCacheKey($code),
+                ['user_id' => $user->id],
+                now()->addSeconds(self::CODE_TTL_SECONDS),
+            );
 
-            return redirect()->away($this->callbackUrl(['token' => $token]));
+            return redirect()->away($this->callbackUrl(['code' => $code]));
         } catch (QueryException $e) {
             // A concurrent first login can race on unique email/google_id constraints.
             Log::warning('Google OAuth account persistence failed.', ['exception' => $e::class]);
@@ -136,10 +145,91 @@ class GoogleAuthController extends Controller
         }
     }
 
+    public function exchange(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'min:32', 'max:128'],
+        ]);
+
+        $payload = Cache::pull($this->codeCacheKey($validated['code']));
+
+        if (! is_array($payload) || ! isset($payload['user_id'])) {
+            Log::notice('Google OAuth code exchange rejected.', ['reason' => 'invalid_or_expired_code']);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'This Google sign-in link is invalid or has expired. Please try again.',
+            ], 422);
+        }
+
+        $user = User::find($payload['user_id']);
+
+        if (! $user) {
+            Log::notice('Google OAuth code exchange rejected.', ['reason' => 'user_not_found']);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'This Google sign-in link is invalid or has expired. Please try again.',
+            ], 422);
+        }
+
+        if ($user->status !== 'active') {
+            Log::notice('Google OAuth code exchange blocked for inactive account.', [
+                'user_id' => $user->id,
+                'status' => $user->status,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'This account is inactive. Please contact support.',
+            ], 403);
+        }
+
+        try {
+            $token = auth('api')->login($user);
+        } catch (Throwable $e) {
+            Log::error('Google OAuth token issuance failed.', [
+                'exception' => $e::class,
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to complete Google sign-in. Please try again.',
+            ], 500);
+        }
+
+        if (! is_string($token) || $token === '') {
+            Log::error('Google OAuth token issuance returned an empty token.', [
+                'user_id' => $user->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to complete Google sign-in. Please try again.',
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'access_token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => auth('api')->factory()->getTTL() * 60,
+                'user' => new UserResource($user->load('profile')),
+            ],
+        ]);
+    }
+
+    private function codeCacheKey(string $code): string
+    {
+        return 'google_oauth:code:'.hash('sha256', $code);
+    }
+
     private function callbackUrl(array $params): string
     {
-        $base = rtrim((string) config('app.frontend_url'), '/') . '/auth/google/callback';
+        $base = rtrim((string) config('app.frontend_url'), '/').'/auth/google/callback';
 
-        return $base . '?' . http_build_query($params);
+        return $base.'?'.http_build_query($params);
     }
 }

@@ -6,6 +6,7 @@ use App\Repositories\PaymentRepository;
 use App\Services\Bakong\BakongApi;
 use App\Services\Bakong\BakongService;
 use App\Services\Bakong\PaymentVerificationService;
+use App\Services\TicketService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -31,7 +32,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(PaymentVerificationService::class, fn ($app) => new PaymentVerificationService(
             $app->make(BakongService::class),
             $app->make(PaymentRepository::class),
-            $app->make(\App\Services\TicketService::class)
+            $app->make(TicketService::class)
         ));
     }
 
@@ -57,6 +58,10 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('otp', function (Request $request) {
             return Limit::perMinute(3)->by($request->ip());
+        });
+
+        RateLimiter::for('google-exchange', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
         });
 
         // Guards the Bakong transaction-check endpoint so long-running
