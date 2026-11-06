@@ -68,7 +68,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Root URL of the Vue.js SPA. Used to redirect the browser back to the
-    | frontend after the Google OAuth handshake has produced a JWT token.
+    | frontend after the Google OAuth handshake has produced a one-time code.
     |
     */
 
