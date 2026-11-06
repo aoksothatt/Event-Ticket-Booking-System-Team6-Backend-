@@ -10,7 +10,6 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -70,43 +69,7 @@ class GoogleAuthController extends Controller
                 return redirect()->away($this->callbackUrl(['error' => 'invalid_google_account']));
             }
 
-            $user = DB::transaction(function () use ($googleId, $email, $name, $googleUser) {
-                $byGoogleId = User::where('google_id', $googleId)->lockForUpdate()->first();
-                $byEmail = User::whereRaw('LOWER(email) = ?', [$email])->lockForUpdate()->first();
-
-                if ($byGoogleId && $byEmail && $byGoogleId->isNot($byEmail)) {
-                    Log::warning('Google OAuth identity conflicts with an existing account.', [
-                        'google_id_present' => true,
-                        'email_account_conflict' => true,
-                    ]);
-
-                    return null;
-                }
-
-                $user = $byGoogleId ?: $byEmail;
-
-                if (! $user) {
-                    if (! Setting::value('user.registration_enabled', true)) {
-                        return 'registration_disabled';
-                    }
-
-                    $user = User::create([
-                        'name' => $name,
-                        'email' => $email,
-                        'google_id' => $googleId,
-                        'avatar' => $googleUser->getAvatar(),
-                        'password' => Hash::make(Str::random(48)),
-                        'role' => Setting::value('user.default_role', 'customer'),
-                        'status' => 'active',
-                        'email_verified_at' => now(),
-                    ]);
-                } elseif (! $user->google_id) {
-                    $user->google_id = $googleId;
-                    $user->save();
-                }
-
-                return $user;
-            });
+            $user = $this->resolveGoogleUser($googleId, $email, $name, $googleUser);
 
             if ($user === 'registration_disabled') {
                 return redirect()->away($this->callbackUrl(['error' => 'registration_disabled']));
@@ -135,13 +98,103 @@ class GoogleAuthController extends Controller
             return redirect()->away($this->callbackUrl(['code' => $code]));
         } catch (QueryException $e) {
             // A concurrent first login can race on unique email/google_id constraints.
-            Log::warning('Google OAuth account persistence failed.', ['exception' => $e::class]);
+            Log::warning('Google OAuth account persistence failed.', [
+                'exception' => $e::class,
+                'sql_state' => $e->errorInfo[0] ?? null,
+            ]);
 
             return redirect()->away($this->callbackUrl(['error' => 'google_account_unavailable']));
         } catch (Throwable $e) {
             Log::error('Google OAuth callback failed.', ['exception' => $e::class]);
 
             return redirect()->away($this->callbackUrl(['error' => 'google_auth_failed']));
+        }
+    }
+
+    private function resolveGoogleUser(string $googleId, string $email, string $name, $googleUser): User|string|null
+    {
+        [$byGoogleId, $byEmail] = $this->findGoogleAccounts($googleId, $email);
+
+        if ($byGoogleId && $byEmail && $byGoogleId->isNot($byEmail)) {
+            Log::warning('Google OAuth identity conflicts with an existing account.', [
+                'google_id_present' => true,
+                'email_account_conflict' => true,
+            ]);
+
+            return null;
+        }
+
+        $user = $byGoogleId ?: $byEmail;
+
+        if ($user) {
+            return $this->linkGoogleId($user, $googleId);
+        }
+
+        if (! Setting::value('user.registration_enabled', true)) {
+            return 'registration_disabled';
+        }
+
+        try {
+            return User::create([
+                'name' => $name,
+                'email' => $email,
+                'google_id' => $googleId,
+                'avatar' => $googleUser->getAvatar(),
+                'password' => Hash::make(Str::random(48)),
+                'role' => 'customer',
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]);
+        } catch (QueryException $e) {
+            Log::warning('Google OAuth account creation failed.', [
+                'exception' => $e::class,
+                'sql_state' => $e->errorInfo[0] ?? null,
+            ]);
+
+            [$byGoogleId, $byEmail] = $this->findGoogleAccounts($googleId, $email);
+
+            if ($byGoogleId && $byEmail && $byGoogleId->isNot($byEmail)) {
+                return null;
+            }
+
+            $user = $byGoogleId ?: $byEmail;
+
+            return $user ? $this->linkGoogleId($user, $googleId) : null;
+        }
+    }
+
+    private function findGoogleAccounts(string $googleId, string $email): array
+    {
+        return [
+            User::where('google_id', $googleId)->first(),
+            User::whereRaw('LOWER(email) = ?', [$email])->first(),
+        ];
+    }
+
+    private function linkGoogleId(User $user, string $googleId): ?User
+    {
+        if ($user->google_id === $googleId) {
+            return $user;
+        }
+
+        if ($user->google_id) {
+            return null;
+        }
+
+        try {
+            $user->google_id = $googleId;
+            $user->save();
+
+            return $user;
+        } catch (QueryException $e) {
+            Log::warning('Google OAuth account linking failed.', [
+                'exception' => $e::class,
+                'sql_state' => $e->errorInfo[0] ?? null,
+            ]);
+
+            $linked = User::where('google_id', $googleId)->first();
+
+            return $linked && $linked->is($user) ? $linked : null;
         }
     }
 

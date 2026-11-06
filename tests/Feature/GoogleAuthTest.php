@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -27,6 +28,7 @@ class GoogleAuthTest extends TestCase
         $this->assertDatabaseHas('users', [
             'google_id' => 'google-123',
             'email' => 'google@example.com',
+            'role' => 'customer',
             'status' => 'active',
         ]);
 
@@ -49,6 +51,45 @@ class GoogleAuthTest extends TestCase
         $this->postJson('/api/auth/google/exchange', ['code' => Str::random(64)])
             ->assertStatus(422)
             ->assertJsonPath('success', false);
+    }
+
+    public function test_google_login_creates_new_users_as_customer_even_when_default_role_is_privileged(): void
+    {
+        Setting::create([
+            'key' => 'user.default_role',
+            'type' => 'string',
+            'group' => 'user',
+            'value' => 'organizer',
+        ]);
+        $this->mockGoogleIdentity('google-role', 'role@example.com');
+
+        $this->get('/auth/google/callback')
+            ->assertRedirectContains('/auth/google/callback?code=');
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'role@example.com',
+            'role' => 'customer',
+        ]);
+    }
+
+    public function test_google_login_links_an_existing_account_without_changing_its_role(): void
+    {
+        $existing = User::factory()->create([
+            'email' => 'existing@example.com',
+            'google_id' => null,
+            'role' => 'customer',
+            'status' => 'active',
+        ]);
+        $this->mockGoogleIdentity('google-existing', 'existing@example.com');
+
+        $this->get('/auth/google/callback')
+            ->assertRedirectContains('/auth/google/callback?code=');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $existing->id,
+            'google_id' => 'google-existing',
+            'role' => 'customer',
+        ]);
     }
 
     public function test_google_login_blocks_inactive_accounts_without_a_token(): void
